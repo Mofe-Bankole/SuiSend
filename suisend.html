@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SuiSend — Send money. It earns while they wait.</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #08080A;
+  --bg-card: #0F0F12;
+  --bg-card2: #F5F5F3;
+  --border: #1A1A1F;
+  --border-light: #252530;
+  --text-primary: #F0EFE9;
+  --text-secondary: #5A5A6A;
+  --text-muted: #2E2E3A;
+  --accent: #9EFF5B;
+  --accent-soft: rgba(158,255,91,0.07);
+  --accent-mid: rgba(158,255,91,0.18);
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── NAV ─────────────────────────────────── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 0 48px;
+  height: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(8,8,10,0.80);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo {
+  font-family: var(--font-display); font-size: 17px; font-weight: 600;
+  letter-spacing: -0.03em; color: var(--text-primary); text-decoration: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.nav-pip {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  animation: blink 2.4s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+.nav-links { display: flex; gap: 28px; list-style: none; }
+.nav-links a {
+  color: var(--text-secondary); text-decoration: none;
+  font-size: 13px; letter-spacing: 0.01em; transition: color .2s;
+}
+.nav-links a:hover { color: var(--text-primary); }
+.nav-cta {
+  padding: 8px 18px;
+  background: var(--text-primary); color: var(--bg);
+  border-radius: 6px; font-family: var(--font-display);
+  font-size: 13px; font-weight: 600; text-decoration: none;
+  transition: opacity .2s;
+}
+.nav-cta:hover { opacity: 0.85; }
+
+/* ── DOT GRID TEXTURE ─────────────────────── */
+.dot-grid {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 100%);
+}
+
+/* ── HERO ─────────────────────────────────── */
+.hero {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  padding: 100px 80px 80px 80px;
+  position: relative;
+  overflow: hidden;
+  gap: 40px;
+}
+.hero-left { position: relative; z-index: 2; }
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 12px 5px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  font-size: 11px; font-weight: 500; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+.hero-tag-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.hero-h1 {
+  font-family: var(--font-display);
+  font-size: clamp(44px, 5.5vw, 76px);
+  font-weight: 700; letter-spacing: -0.04em; line-height: 1.0;
+  margin-bottom: 22px;
+}
+.hero-h1 em { font-style: normal; color: var(--accent); }
+.hero-sub {
+  font-size: 16px; color: var(--text-secondary); font-weight: 300;
+  line-height: 1.75; max-width: 400px; margin-bottom: 40px;
+}
+.hero-actions { display: flex; gap: 10px; align-items: center; margin-bottom: 64px; }
+.btn-p {
+  padding: 13px 26px; background: var(--text-primary); color: var(--bg);
+  border: none; border-radius: 8px; font-family: var(--font-display);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: opacity .2s, transform .15s; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.btn-p:hover { opacity: 0.88; transform: translateY(-1px); }
+.btn-s {
+  padding: 13px 26px; background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border-light); border-radius: 8px;
+  font-family: var(--font-display); font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all .2s; text-decoration: none;
+}
+.btn-s:hover { border-color: var(--text-muted); color: var(--text-primary); transform: translateY(-1px); }
+
+/* live stat row */
+.hero-live {
+  display: flex; align-items: center; gap: 32px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+.live-item { }
+.live-val {
+  font-family: var(--font-display); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.03em; color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.live-val span { color: var(--accent); }
+.live-label { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.live-divider { width: 1px; height: 32px; background: var(--border-light); }
+
+/* hero right — 3D orb scene */
+.hero-right {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+}
+.orb-wrap {
+  position: relative; width: 460px; height: 460px;
+}
+.orb-glow {
+  position: absolute; inset: -60px;
+  background: radial-gradient(circle at 50% 50%, rgba(158,255,91,0.08) 0%, transparent 65%);
+  border-radius: 50%;
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+@keyframes glow-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.08)} }
+.orb-ring {
+  position: absolute; inset: 20px;
+  border: 1px solid rgba(158,255,91,0.12);
+  border-radius: 50%;
+  animation: spin-slow 18s linear infinite;
+}
+.orb-ring-2 {
+  position: absolute; inset: 60px;
+  border: 1px dashed rgba(255,255,255,0.05);
+  border-radius: 50%;
+  animation: spin-slow 28s linear infinite reverse;
+}
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+
+/* The SVG coin */
+.orb-coin {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 240px; height: 240px;
+  animation: float-coin 5s ease-in-out infinite;
+}
+@keyframes float-coin {
+  0%,100%{ transform: translate(-50%,-50%) translateY(0px) rotate(0deg); }
+  33%{ transform: translate(-50%,-50%) translateY(-14px) rotate(2deg); }
+  66%{ transform: translate(-50%,-50%) translateY(6px) rotate(-1deg); }
+}
+
+/* small floating cards around orb */
+.orb-card {
+  position: absolute;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 14px 16px;
+  animation: float-card 4s ease-in-out infinite;
+}
+.oc1 { top: 30px; right: -10px; width: 160px; animation-delay: 0s; }
+.oc2 { bottom: 60px; left: -20px; width: 150px; animation-delay: 1.5s; }
+.oc3 { bottom: 10px; right: 10px; width: 130px; animation-delay: 2.5s; }
+@keyframes float-card {
+  0%,100%{ transform: translateY(0); }
+  50%{ transform: translateY(-7px); }
+}
+.oc-label { font-size: 10px; color: var(--text-secondary); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.oc-val { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.oc-val.green { color: var(--accent); }
+.oc-sub { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
+.oc-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 7px; border-radius: 4px;
+  background: var(--accent-soft); border: 1px solid var(--accent-mid);
+  font-size: 10px; font-weight: 600; color: var(--accent);
+  letter-spacing: 0.04em; text-transform: uppercase; margin-top: 6px;
+}
+.oc-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-secondary);
+}
+.oc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.5s ease-in-out infinite; }
+
+/* ── STATS STRIP ──────────────────────────── */
+.stats-strip {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.stats-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: grid; grid-template-columns: repeat(4,1fr);
+  background: var(--border);
+  gap: 1px;
+}
+.stat-cell {
+  background: var(--bg); padding: 44px 40px;
+  transition: background .25s;
+}
+.stat-cell:hover { background: var(--bg-card); }
+.stat-num {
+  font-family: var(--font-display); font-size: 38px; font-weight: 700;
+  letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
+}
+.stat-num em { font-style: normal; color: var(--accent); }
+.stat-desc { font-size: 13px; color: var(--text-secondary); }
+
+/* ── HOW IT WORKS ─────────────────────────── */
+.section-wrap { max-width: 1200px; margin: 0 auto; padding: 120px 48px; }
+.eyebrow {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+}
+.section-h2 {
+  font-family: var(--font-display); font-size: clamp(28px,3.5vw,48px);
+  font-weight: 700; letter-spacing: -0.035em; line-height: 1.08;
+  margin-bottom: 64px; max-width: 500px;
+}
+
+/* BloomFi-style alternating card grid */
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 2px;
+  background: var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.feat {
+  padding: 40px 36px 40px;
+  position: relative;
+  transition: filter .2s;
+}
+.feat-dark { background: #0C0C10; }
+.feat-mid  { background: #101015; }
+.feat-light {
+  background: #F0EFE9;
+  color: #08080A;
+}
+.feat-accent {
+  background: #131318;
+  border-left: 2px solid var(--accent);
+}
+.feat-wide { grid-column: span 2; }
+.feat-tall { grid-row: span 2; }
+
+.feat-num {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
+  color: var(--text-secondary); margin-bottom: 28px;
+}
+.feat-light .feat-num { color: rgba(8,8,10,0.4); }
+.feat-h3 {
+  font-family: var(--font-display); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 12px;
+}
+.feat-light .feat-h3 { color: #08080A; }
+.feat-p { font-size: 14px; color: var(--text-secondary); line-height: 1.72; max-width: 280px; }
+.feat-light .feat-p { color: rgba(8,8,10,0.55); }
+.feat-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  border: 1px solid var(--border-light);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; margin-bottom: 24px;
+}
+.feat-light .feat-icon { border-color: rgba(8,8,10,0.15); }
+
+/* yield vis inside tall card */
+.feat-yield-vis {
+  margin-top: 28px;
+  padding: 16px;
+  background: rgba(158,255,91,0.06);
+  border: 1px solid rgba(158,255,91,0.12);
+  border-radius: 10px;
+}
+.fyv-label { font-size: 10px; color: var(--accent); opacity: 0.7; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+.fyv-val { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.fyv-sub { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+.fyv-bar { height: 2px; background: var(--border-light); border-radius: 999px; margin-top: 14px; overflow: hidden; }
+.fyv-bar-fill { height: 100%; width: 63%; background: linear-gradient(90deg, var(--accent), rgba(158,255,91,0.3)); border-radius: 999px; animation: bar-grow 3s ease-out forwards; }
+@keyframes bar-grow { from{ width: 0% } to{ width: 63% } }
+
+/* ── DEMO SECTION ─────────────────────────── */
+.demo-wrap {
+  max-width: 1200px; margin: 0 auto;
+  padding: 0 48px 120px;
+  display: grid; grid-template-columns: 1fr 1.1fr;
+  gap: 80px; align-items: start;
+}
+.demo-sticky { position: sticky; top: 100px; }
+.demo-sub { font-size: 15px; color: var(--text-secondary); line-height: 1.8; margin-bottom: 32px; max-width: 380px; }
+.demo-checklist { list-style: none; display: flex; flex-direction: column; gap: 13px; }
+.demo-checklist li {
+  display: flex; align-items: flex-start; gap: 11px;
+  font-size: 14px; color: var(--text-secondary); line-height: 1.5;
+}
+.dcheck {
+  flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent-soft); border: 1px solid var(--accent-mid);
+  display: flex; align-items: center; justify-content: center; margin-top: 1px;
+}
+.dcheck svg { width: 9px; height: 9px; stroke: var(--accent); stroke-width: 2.5; fill: none; }
+
+/* app mockup */
+.app-shell {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 20px; overflow: hidden;
+}
+.app-bar {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 7px;
+}
+.app-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border-light); }
+.app-url {
+  flex: 1; margin-left: 8px; height: 26px; background: var(--bg);
+  border-radius: 6px; display: flex; align-items: center;
+  padding: 0 11px; font-size: 11px; color: var(--text-secondary);
+}
+.app-body { padding: 28px 24px; }
+
+.app-tabs {
+  display: flex; border: 1px solid var(--border-light);
+  border-radius: 8px; padding: 3px; margin-bottom: 24px; gap: 0;
+}
+.app-tab {
+  flex: 1; padding: 8px; text-align: center; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); border-radius: 6px; cursor: pointer;
+  font-family: var(--font-display); transition: all .15s;
+}
+.app-tab.on { background: var(--text-primary); color: var(--bg); }
+
+.app-field { margin-bottom: 14px; }
+.app-flabel {
+  font-size: 10px; font-weight: 500; color: var(--text-secondary);
+  letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px;
+}
+.app-finput {
+  width: 100%; background: var(--bg); border: 1px solid var(--border-light);
+  border-radius: 8px; padding: 11px 13px; font-size: 15px;
+  font-family: var(--font-display); color: var(--text-primary);
+  font-variant-numeric: tabular-nums; outline: none; transition: border-color .2s;
+}
+.app-finput:focus { border-color: rgba(158,255,91,0.5); }
+
+.yield-box {
+  padding: 13px 15px; background: var(--accent-soft);
+  border: 1px solid var(--accent-mid); border-radius: 8px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px;
+}
+.yb-left { font-size: 12px; color: var(--accent); opacity: 0.75; font-weight: 500; }
+.yb-right {
+  font-family: var(--font-display); font-size: 15px; font-weight: 700;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.app-btn {
+  width: 100%; padding: 13px; background: var(--text-primary); color: var(--bg);
+  border: none; border-radius: 8px; font-family: var(--font-display);
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s;
+  letter-spacing: -0.01em;
+}
+.app-btn:hover { opacity: 0.85; }
+
+/* link generated state */
+.link-gen {
+  margin-top: 14px; padding: 14px; background: var(--bg);
+  border: 1px solid var(--border-light); border-radius: 8px;
+  display: none;
+}
+.link-gen.show { display: block; }
+.lg-label { font-size: 10px; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 7px; }
+.lg-url {
+  font-family: var(--font-display); font-size: 13px; color: var(--text-secondary);
+  background: var(--bg-card); padding: 8px 12px; border-radius: 6px;
+  border: 1px solid var(--border); cursor: pointer; word-break: break-all;
+  transition: border-color .2s;
+}
+.lg-url:hover { border-color: var(--accent-mid); }
+.lg-copied { font-size: 11px; color: var(--accent); margin-top: 6px; display: none; }
+
+/* ── PROTOCOL STRIP ───────────────────────── */
+.protocol-strip {
+  border-top: 1px solid var(--border);
+  padding: 0 48px;
+}
+.ps-inner {
+  max-width: 1200px; margin: 0 auto;
+  padding: 48px 0;
+  display: flex; align-items: center; gap: 40px;
+}
+.ps-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.ps-rule { flex: 0 0 40px; height: 1px; background: var(--border-light); }
+.ps-items { display: flex; gap: 36px; flex-wrap: wrap; align-items: center; }
+.ps-item {
+  font-family: var(--font-display); font-size: 13px; font-weight: 600;
+  color: var(--text-muted); letter-spacing: -0.01em; transition: color .2s;
+}
+.ps-item:hover { color: var(--text-secondary); }
+
+/* ── CTA ──────────────────────────────────── */
+.cta-wrap {
+  border-top: 1px solid var(--border);
+  padding: 120px 48px;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; position: relative; overflow: hidden;
+}
+.cta-bg-glow {
+  position: absolute; width: 500px; height: 500px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(158,255,91,0.045) 0%, transparent 70%);
+  top: 50%; left: 50%; transform: translate(-50%,-50%); pointer-events: none;
+}
+.cta-h2 {
+  font-family: var(--font-display); font-size: clamp(36px,5vw,68px);
+  font-weight: 700; letter-spacing: -0.04em; line-height: 1.0;
+  max-width: 700px; margin-bottom: 20px; position: relative;
+}
+.cta-h2 em { font-style: normal; color: var(--accent); }
+.cta-sub {
+  font-size: 16px; color: var(--text-secondary); max-width: 380px;
+  font-weight: 300; margin-bottom: 40px; position: relative;
+}
+.cta-actions { display: flex; gap: 12px; position: relative; }
+
+/* ── FOOTER ───────────────────────────────── */
+footer {
+  padding: 28px 48px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.f-logo { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--text-muted); letter-spacing: -0.02em; }
+.f-links { display: flex; gap: 24px; list-style: none; }
+.f-links a { font-size: 12px; color: var(--text-muted); text-decoration: none; transition: color .2s; }
+.f-links a:hover { color: var(--text-secondary); }
+.f-note { font-size: 12px; color: var(--text-muted); }
+
+/* ── REVEAL ANIM ──────────────────────────── */
+.reveal { opacity: 0; transform: translateY(22px); transition: opacity .65s ease, transform .65s ease; }
+.reveal.in { opacity: 1; transform: none; }
+.rd1 { transition-delay: .1s; }
+.rd2 { transition-delay: .2s; }
+.rd3 { transition-delay: .3s; }
+
+/* ── RESPONSIVE ───────────────────────────── */
+@media (max-width: 900px) {
+  nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .hero { grid-template-columns: 1fr; padding: 90px 24px 60px; }
+  .hero-right { display: none; }
+  .section-wrap, .demo-wrap { padding-left: 24px; padding-right: 24px; }
+  .feature-grid { grid-template-columns: 1fr; }
+  .feat-wide { grid-column: span 1; }
+  .stats-inner { grid-template-columns: 1fr 1fr; }
+  .demo-wrap { grid-template-columns: 1fr; }
+  .demo-sticky { position: static; }
+  .ps-inner { flex-direction: column; align-items: flex-start; }
+  footer { flex-direction: column; gap: 16px; padding: 24px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">
+    <div class="nav-pip"></div>SuiSend
+  </a>
+  <ul class="nav-links">
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#send">Send</a></li>
+    <li><a href="https://suiexplorer.com" target="_blank">Explorer ↗</a></li>
+  </ul>
+  <a href="#send" class="nav-cta">Launch app →</a>
+</nav>
+
+<!-- ═══════════ HERO ═══════════ -->
+<section class="hero">
+  <div class="dot-grid"></div>
+
+  <div class="hero-left">
+    <div class="hero-tag">
+      <div class="hero-tag-dot"></div>
+      Built on Sui · Scallop DeFi
+    </div>
+
+    <h1 class="hero-h1">
+      Send money.<br>
+      It <em>earns</em><br>
+      while they wait.
+    </h1>
+
+    <p class="hero-sub">
+      Every payment link you create automatically deposits into DeFi yield. Recipients claim your original amount — plus interest. Idle money is dead money.
+    </p>
+
+    <div class="hero-actions">
+      <a href="#send" class="btn-p">
+        Create a link
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h10M8 3l4 4-4 4"/></svg>
+      </a>
+      <a href="#how" class="btn-s">How it works</a>
+    </div>
+
+    <div class="hero-live">
+      <div class="live-item">
+        <div class="live-val"><span id="h-tvl">847K</span> <em>SUI</em></div>
+        <div class="live-label">Earning on testnet</div>
+      </div>
+      <div class="live-divider"></div>
+      <div class="live-item">
+        <div class="live-val">8.2<em>%</em></div>
+        <div class="live-label">Current APY</div>
+      </div>
+      <div class="live-divider"></div>
+      <div class="live-item">
+        <div class="live-val">&lt;0.5<em>s</em></div>
+        <div class="live-label">Finality on Sui</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3D Orb + floating cards -->
+  <div class="hero-right">
+    <div class="orb-wrap">
+      <div class="orb-glow"></div>
+      <div class="orb-ring"></div>
+      <div class="orb-ring-2"></div>
+
+      <!-- SVG coin as hero object -->
+      <svg class="orb-coin" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="cg1" cx="38%" cy="32%" r="65%">
+            <stop offset="0%" stop-color="#C8FF8A"/>
+            <stop offset="45%" stop-color="#9EFF5B"/>
+            <stop offset="100%" stop-color="#4A8A20"/>
+          </radialGradient>
+          <radialGradient id="cg2" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
+            <stop offset="100%" stop-color="rgba(0,0,0,0.4)"/>
+          </radialGradient>
+          <filter id="cshadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="rgba(158,255,91,0.25)"/>
+          </filter>
+        </defs>
+        <!-- coin body -->
+        <ellipse cx="120" cy="120" rx="108" ry="108" fill="url(#cg1)" filter="url(#cshadow)"/>
+        <!-- rim -->
+        <ellipse cx="120" cy="120" rx="108" ry="108" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+        <!-- inner ring -->
+        <ellipse cx="120" cy="120" rx="84" ry="84" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+        <!-- shine -->
+        <ellipse cx="84" cy="84" rx="40" ry="28" fill="rgba(255,255,255,0.18)" transform="rotate(-25 84 84)"/>
+        <!-- S letterform -->
+        <text x="120" y="136" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="72" font-weight="700" fill="rgba(0,0,0,0.5)" letter-spacing="-4">S</text>
+        <text x="118" y="133" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="72" font-weight="700" fill="rgba(255,255,255,0.85)" letter-spacing="-4">S</text>
+        <!-- overlay gloss -->
+        <ellipse cx="120" cy="120" rx="108" ry="108" fill="url(#cg2)" opacity="0.3"/>
+      </svg>
+
+      <!-- floating card 1: yield -->
+      <div class="orb-card oc1">
+        <div class="oc-label">Yield earned</div>
+        <div class="oc-val green" id="oc-yield">0.08471</div>
+        <div class="oc-sub">SUI accrued</div>
+        <div class="oc-badge">▲ 8.2% APY</div>
+      </div>
+
+      <!-- floating card 2: status -->
+      <div class="orb-card oc2">
+        <div class="oc-status">
+          <div class="oc-dot"></div>
+          <span>Earning now</span>
+        </div>
+        <div style="margin-top:10px">
+          <div class="oc-val" style="font-size:15px">3 links</div>
+          <div class="oc-sub">$847 active</div>
+        </div>
+      </div>
+
+      <!-- floating card 3: claimed -->
+      <div class="orb-card oc3">
+        <div class="oc-label">Claimed</div>
+        <div class="oc-val" style="font-size:15px">100.084 <span style="font-size:11px;color:var(--text-secondary);font-weight:400">SUI</span></div>
+        <div class="oc-sub" style="color:var(--accent)">+0.084 earned</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ STATS ═══════════ -->
+<div class="stats-strip">
+  <div class="stats-inner">
+    <div class="stat-cell reveal">
+      <div class="stat-num"><span id="s1">0</span> <em>SUI</em></div>
+      <div class="stat-desc">Total value earning on testnet</div>
+    </div>
+    <div class="stat-cell reveal rd1">
+      <div class="stat-num"><span id="s2">0</span><em>%</em></div>
+      <div class="stat-desc">Average APY via Scallop</div>
+    </div>
+    <div class="stat-cell reveal rd2">
+      <div class="stat-num"><span id="s3">0</span></div>
+      <div class="stat-desc">Payment links created</div>
+    </div>
+    <div class="stat-cell reveal rd3">
+      <div class="stat-num">&lt;<span id="s4">0</span><em>s</em></div>
+      <div class="stat-desc">Transaction finality on Sui</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ HOW IT WORKS ═══════════ -->
+<div class="section-wrap" id="how">
+  <div class="eyebrow">How it works</div>
+  <h2 class="section-h2 reveal">Three steps.<br>No idle money.</h2>
+
+  <div class="feature-grid">
+    <!-- tall card left -->
+    <div class="feat feat-dark feat-tall reveal">
+      <div class="feat-num">01</div>
+      <div class="feat-icon">→</div>
+      <div class="feat-h3">Create a payment link</div>
+      <p class="feat-p">Connect your Sui wallet, enter an amount. One transaction deposits your funds directly into Scallop's lending pool and generates a shareable claim link.</p>
+      <div class="feat-yield-vis">
+        <div class="fyv-label">Live yield preview</div>
+        <div class="fyv-val" id="feat-ticker">0.0000000</div>
+        <div class="fyv-sub">SUI earned this session</div>
+        <div class="fyv-bar"><div class="fyv-bar-fill"></div></div>
+      </div>
+    </div>
+
+    <!-- top-right -->
+    <div class="feat feat-light reveal rd1">
+      <div class="feat-num" style="color:rgba(8,8,10,0.35)">02</div>
+      <div class="feat-icon" style="border-color:rgba(8,8,10,0.12);color:#08080A">◎</div>
+      <div class="feat-h3">Money earns</div>
+      <p class="feat-p">While unclaimed, every second your funds compound. The longer they wait — the more they receive.</p>
+    </div>
+
+    <!-- top-right-2 -->
+    <div class="feat feat-mid reveal rd2">
+      <div class="feat-num">02b</div>
+      <div class="feat-icon">⚡</div>
+      <div class="feat-h3">AI picks best yield</div>
+      <p class="feat-p">Our agent scans Sui DeFi protocols in real time and routes to the highest APY automatically.</p>
+    </div>
+
+    <!-- bottom-right wide -->
+    <div class="feat feat-accent feat-wide reveal rd1">
+      <div class="feat-num">03</div>
+      <div class="feat-icon" style="border-color:rgba(158,255,91,0.2)">↓</div>
+      <div class="feat-h3">Recipient claims everything</div>
+      <p class="feat-p">One click. They receive your original amount plus all interest accrued during the wait. If unclaimed after 30 days, you get it all back — with yield.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ DEMO ═══════════ -->
+<div class="demo-wrap" id="send">
+  <div class="demo-sticky">
+    <div class="eyebrow">The product</div>
+    <h2 class="section-h2 reveal" style="margin-bottom:16px">Payments that work<br>while you don't</h2>
+    <p class="demo-sub reveal rd1">Traditional payment links lose value the moment they're sent. SuiSend flips that — every link is a live yield position, not a static IOU.</p>
+    <ul class="demo-checklist reveal rd2">
+      <li><div class="dcheck"><svg viewBox="0 0 10 8"><polyline points="1,4 3.5,6.5 9,1"/></svg></div>Self-custodial. Funds sit in Scallop — never with us.</li>
+      <li><div class="dcheck"><svg viewBox="0 0 10 8"><polyline points="1,4 3.5,6.5 9,1"/></svg></div>Sub-second finality. No waiting for confirmations.</li>
+      <li><div class="dcheck"><svg viewBox="0 0 10 8"><polyline points="1,4 3.5,6.5 9,1"/></svg></div>30-day auto-refund with all yield if unclaimed.</li>
+      <li><div class="dcheck"><svg viewBox="0 0 10 8"><polyline points="1,4 3.5,6.5 9,1"/></svg></div>AI agent routes to best available APY on Sui.</li>
+    </ul>
+  </div>
+
+  <div class="app-shell reveal rd1">
+    <div class="app-bar">
+      <div class="app-dot"></div><div class="app-dot"></div><div class="app-dot"></div>
+      <div class="app-url">suisend.app/send</div>
+    </div>
+    <div class="app-body">
+      <div class="app-tabs">
+        <div class="app-tab on" onclick="switchTab(this)">Send</div>
+        <div class="app-tab" onclick="switchTab(this)">Claim</div>
+        <div class="app-tab" onclick="switchTab(this)">History</div>
+      </div>
+
+      <div class="app-field">
+        <div class="app-flabel">Amount</div>
+        <input class="app-finput" id="app-amount" type="text" value="100 SUI" oninput="recalcYield()">
+      </div>
+      <div class="app-field">
+        <div class="app-flabel">Note (optional)</div>
+        <input class="app-finput" type="text" placeholder="For the Lagos trip...">
+      </div>
+
+      <div class="yield-box">
+        <div class="yb-left">Est. yield at 7 days (8.2% APY)</div>
+        <div class="yb-right" id="app-yield-preview">+0.1575 SUI</div>
+      </div>
+
+      <button class="app-btn" onclick="simulateSend()">Connect wallet to send →</button>
+
+      <div class="link-gen" id="link-gen">
+        <div class="lg-label">Link generated ✓</div>
+        <div class="lg-url" onclick="copyLink(this)">suisend.app/claim/0x4f2a...8c91</div>
+        <div class="lg-copied" id="lg-copied">Copied to clipboard ✓</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PROTOCOL STRIP ═══════════ -->
+<div class="protocol-strip">
+  <div class="ps-inner">
+    <div class="ps-label">Built with</div>
+    <div class="ps-rule"></div>
+    <div class="ps-items">
+      <div class="ps-item">Sui Network</div>
+      <div class="ps-item">Scallop Protocol</div>
+      <div class="ps-item">Next.js 15</div>
+      <div class="ps-item">Fastify</div>
+      <div class="ps-item">@mysten/dapp-kit</div>
+      <div class="ps-item">OpenCode</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ CTA ═══════════ -->
+<section class="cta-wrap">
+  <div class="cta-bg-glow"></div>
+  <div class="eyebrow" style="position:relative">Sui Overflow 2026 · Testnet live</div>
+  <h2 class="cta-h2 reveal">
+    Stop sending.<br>Start <em>earning</em>.
+  </h2>
+  <p class="cta-sub reveal rd1">Every payment you've ever sent sat idle. Never again.</p>
+  <div class="cta-actions reveal rd2">
+    <a href="#send" class="btn-p">Create your first link →</a>
+    <a href="https://github.com" target="_blank" class="btn-s">View on GitHub</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="f-logo">SuiSend</div>
+  <ul class="f-links">
+    <li><a href="#">Docs</a></li>
+    <li><a href="#">GitHub</a></li>
+    <li><a href="https://suiexplorer.com" target="_blank">Explorer</a></li>
+  </ul>
+  <div class="f-note">Built for Sui Overflow 2026</div>
+</footer>
+
+<script>
+/* yield ticker in hero card */
+let yv = 0.0847100;
+const ocYield = document.getElementById('oc-yield');
+const featTicker = document.getElementById('feat-ticker');
+setInterval(() => {
+  yv += 0.0000028;
+  if (ocYield) ocYield.textContent = yv.toFixed(5);
+  if (featTicker) featTicker.textContent = yv.toFixed(7);
+}, 900);
+
+/* stat counters */
+function animCount(el, target, decimals, suffix, duration) {
+  if (!el) return;
+  const start = performance.now();
+  const run = now => {
+    const p = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    const val = target * ease;
+    el.textContent = (decimals ? val.toFixed(decimals) : Math.floor(val)) + (suffix||'');
+    if (p < 1) requestAnimationFrame(run);
+  };
+  requestAnimationFrame(run);
+}
+
+let statsRun = false;
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('in');
+      if (e.target.closest('.stats-inner') && !statsRun) {
+        statsRun = true;
+        animCount(document.getElementById('s1'), 847, 0, 'K', 1800);
+        animCount(document.getElementById('s2'), 8.2, 1, '', 1400);
+        animCount(document.getElementById('s3'), 142, 0, '', 1600);
+        animCount(document.getElementById('s4'), 0.5, 1, '', 1000);
+      }
+    }
+  });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal, .stat-cell').forEach(el => obs.observe(el));
+
+/* demo yield recalc */
+function recalcYield() {
+  const raw = parseFloat(document.getElementById('app-amount').value.replace(/[^0-9.]/g,'')) || 0;
+  const y = (raw * 0.082 / 365 * 7).toFixed(4);
+  document.getElementById('app-yield-preview').textContent = '+' + y + ' SUI';
+}
+
+/* simulate send + show link */
+function simulateSend() {
+  const lg = document.getElementById('link-gen');
+  lg.classList.add('show');
+  lg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* copy link */
+function copyLink(el) {
+  navigator.clipboard.writeText('https://suisend.app/claim/0x4f2a...8c91').catch(()=>{});
+  document.getElementById('lg-copied').style.display = 'block';
+  setTimeout(() => { document.getElementById('lg-copied').style.display = 'none'; }, 2000);
+}
+
+/* tabs */
+function switchTab(t) {
+  document.querySelectorAll('.app-tab').forEach(x => x.classList.remove('on'));
+  t.classList.add('on');
+}
+</script>
+</body>
+</html>
