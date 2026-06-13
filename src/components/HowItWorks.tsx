@@ -36,10 +36,17 @@ export default function HowItWorks() {
   }, []);
 
   return (
-    <div className="section-wrap mx-auto max-w-[1200px] px-12 py-[120px] max-md:px-6" id="how">
+    <div
+      className="section-wrap mx-auto max-w-[1200px] px-12 py-[120px] max-md:px-6"
+      id="how"
+    >
       <div className="eyebrow">How it works</div>
       <Reveal>
-        <h2 className="section-h2">Three steps.<br />No idle money.</h2>
+        <h2 className="section-h2">
+          Three steps.
+          <br />
+          No idle money.
+        </h2>
       </Reveal>
 
       <div className="feature-grid" ref={gridRef}>
@@ -48,35 +55,63 @@ export default function HowItWorks() {
           <div className="feat-icon">→</div>
           <div className="feat-h3">Create a payment link</div>
           <p className="feat-p">
-            Connect your Sui wallet, enter an amount. One transaction deposits your funds directly into Scallop&apos;s lending pool and generates a shareable claim link.
+            Connect your Sui wallet, enter an amount. One transaction deposits
+            your funds directly into Scallop&apos;s lending pool and generates a
+            shareable claim link.
           </p>
           <div className="feat-yield-vis">
             <div className="fyv-label">Live yield preview</div>
-            <div className="fyv-val" ref={featTickerRef}>0.0000000</div>
+            <div className="fyv-val" ref={featTickerRef}>
+              0.0000000
+            </div>
             <div className="fyv-sub">SUI earned this session</div>
-            <div className="fyv-bar"><div className="fyv-bar-fill" /></div>
+            <div className="fyv-bar">
+              <div className="fyv-bar-fill" />
+            </div>
           </div>
         </div>
 
         <div className="feat feat-light reveal rd1">
-          <div className="feat-num" style={{ color: "rgba(8,8,10,0.35)" }}>02</div>
-          <div className="feat-icon" style={{ borderColor: "rgba(8,8,10,0.12)", color: "#08080A" }}>◎</div>
+          <div className="feat-num" style={{ color: "rgba(8,8,10,0.35)" }}>
+            02
+          </div>
+          <div
+            className="feat-icon"
+            style={{ borderColor: "rgba(8,8,10,0.12)", color: "#08080A" }}
+          >
+            ◎
+          </div>
           <div className="feat-h3">Money earns</div>
-          <p className="feat-p">While unclaimed, every second your funds compound. The longer they wait — the more they receive.</p>
+          <p className="feat-p">
+            While unclaimed, every second your funds compound. The longer they
+            wait — the more they receive.
+          </p>
         </div>
 
         <div className="feat feat-mid reveal rd2">
           <div className="feat-num">02b</div>
           <div className="feat-icon">⚡</div>
           <div className="feat-h3">AI picks best yield</div>
-          <p className="feat-p">Our agent scans Sui DeFi protocols in real time and routes to the highest APY automatically.</p>
+          <p className="feat-p">
+            Our agent scans Sui DeFi protocols in real time and routes to the
+            highest APY automatically.
+          </p>
         </div>
 
         <div className="feat feat-accent feat-wide reveal rd1">
           <div className="feat-num">03</div>
-          <div className="feat-icon" style={{ borderColor: "rgba(158,255,91,0.2)" }}>↓</div>
+          <div
+            className="feat-icon"
+            style={{ borderColor: "rgba(158,255,91,0.2)" }}
+          >
+            ↓
+          </div>
           <div className="feat-h3">Recipient claims everything</div>
-          <p className="feat-p">One click. They receive your original amount plus all interest accrued during the wait. If unclaimed after 30 days, you get it all back — with yield.</p>
+          <p className="feat-p">
+            One click. They receive your original amount plus all interest
+            accrued during the wait. If unclaimed after 30 days, you get it all
+            back — with yield.
+          </p>
         </div>
       </div>
     </div>
