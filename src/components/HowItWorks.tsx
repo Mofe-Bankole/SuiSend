@@ -89,7 +89,7 @@ export default function HowItWorks() {
         </div>
 
         <div className="feat feat-mid reveal rd2">
-          <div className="feat-num">02b</div>
+          <div className="feat-num">02b <span className="coming-badge ml-2">Coming soon</span></div>
           <div className="feat-icon">⚡</div>
           <div className="feat-h3">AI picks best yield</div>
           <p className="feat-p">

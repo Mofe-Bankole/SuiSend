@@ -6,6 +6,18 @@ export default function CTA() {
       <div className="cta-bg-glow" />
       <div className="eyebrow relative">Sui Overflow 2026 · Testnet live</div>
       <Reveal>
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--text-secondary)",
+            marginBottom: 8,
+            position: "relative",
+          }}
+        >
+          Psst — while you read this, idle money earns nothing.
+        </p>
+      </Reveal>
+      <Reveal>
         <h2 className="cta-h2">
           Stop sending.
           <br />
@@ -19,7 +31,7 @@ export default function CTA() {
       </Reveal>
       <Reveal delay="rd2">
         <div className="cta-actions">
-          <a href="#send" className="btn-p">
+          <a href="/app" className="btn-p">
             Create your first link →
           </a>
           <a

@@ -19,7 +19,7 @@ export default function Navbar() {
         </li>
         <li>
           <a
-            href="#send"
+            href="/app"
             className="text-text-secondary text-[13px] no-underline transition-colors hover:text-text-primary"
           >
             Send
@@ -36,7 +36,7 @@ export default function Navbar() {
         </li>
       </ul>
       <a
-        href="#send"
+        href="/app"
         className="px-[18px] py-2 bg-text-primary text-background rounded-[6px] font-display text-[13px] font-semibold no-underline transition-opacity hover:opacity-85"
       >
         Launch app →

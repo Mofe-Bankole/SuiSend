@@ -37,7 +37,7 @@ export default function Hero() {
         </p>
 
         <div className="flex gap-2.5 items-center mb-16">
-          <a href="#send" className="btn-p">
+          <a href="/app" className="btn-p">
             Create a link
             <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7h10M8 3l4 4-4 4"/></svg>
           </a>
@@ -87,8 +87,8 @@ export default function Hero() {
             <ellipse cx="120" cy="120" rx="108" ry="108" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
             <ellipse cx="120" cy="120" rx="84" ry="84" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
             <ellipse cx="84" cy="84" rx="40" ry="28" fill="rgba(255,255,255,0.18)" transform="rotate(-25 84 84)" />
-            <text x="120" y="136" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontSize="72" fontWeight="700" fill="rgba(0,0,0,0.5)" letterSpacing="-4">S</text>
-            <text x="118" y="133" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontSize="72" fontWeight="700" fill="rgba(255,255,255,0.85)" letterSpacing="-4">S</text>
+            <text x="120" y="136" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontSize="61.5" fontWeight="700" fill="rgba(0,0,0,0.5)" letterSpacing="-4">Suisend</text>
+            <text x="118" y="133" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontSize="72" fontWeight="700" fill="rgba(255,255,255,0.85)" letterSpacing="-4"></text>
             <ellipse cx="120" cy="120" rx="108" ry="108" fill="url(#cg2)" opacity="0.3" />
           </svg>
 

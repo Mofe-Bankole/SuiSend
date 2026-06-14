@@ -58,7 +58,7 @@ export default function DemoSection() {
             <li><div className="dcheck">{checkIcon}</div>Self-custodial. Funds sit in Scallop — never with us.</li>
             <li><div className="dcheck">{checkIcon}</div>Sub-second finality. No waiting for confirmations.</li>
             <li><div className="dcheck">{checkIcon}</div>30-day auto-refund with all yield if unclaimed.</li>
-            <li><div className="dcheck">{checkIcon}</div>AI agent routes to best available APY on Sui.</li>
+            <li><div className="dcheck">{checkIcon}</div>AI agent routes to best available APY on Sui. <span className="coming-badge">Coming soon</span></li>
           </ul>
         </Reveal>
       </div>
