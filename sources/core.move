@@ -27,10 +27,12 @@ module suisend::core {
     use sui::coin::Coin;
     use sui::event;
     use sui::object::{Self, ID, UID};
+    use sui::sui::SUI;
     use sui::table::{Self, Table};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
 
+    use suisend::yield;
     use suisend::yield::YieldVault;
 
     // ─── Constants ───────────────────────────────────────────────────────────
@@ -281,6 +283,12 @@ module suisend::core {
         );
     }
 
+    /// Test-only wrapper so core_tests can initialize the module.
+    #[test_only]
+    public(package) fun init_for_testing(ctx: &mut TxContext) {
+        init(ctx)
+    }
+
     // ─── Payment lifecycle: CREATE ──────────────────────────────────────────
 
     /// Create a new payment link.
@@ -332,14 +340,14 @@ module suisend::core {
         };
 
         // Record the SUI amount BEFORE the coin is consumed by yield::deposit.
-        let amount = coin::value(&coin);
+        let amount = coin.value();
 
         // Deposit the SUI into the yield protocol. This consumes the coin
         // and returns a position_id we store in the payment record.
         let position_id = yield::deposit(vault, coin, protocol, clock, ctx);
 
         // Current timestamp used for both created_at and expiry calculation.
-        let now = clock::timestamp_ms(clock);
+        let now = clock.timestamp_ms();
 
         // Build and store the PaymentRecord, keyed by link_hash.
         table::add(&mut book.payments, link_hash, PaymentRecord {
@@ -421,7 +429,7 @@ module suisend::core {
         let coin = yield::withdraw(vault, record.position_id, clock, ctx);
 
         // Calculate the yield earned: total withdrawn minus original deposit.
-        let total_value = coin::value(&coin);
+        let total_value = coin.value();
         let yield_earned = total_value - record.amount;
 
         // Transfer the full amount (principal + yield) to the recipient.
@@ -434,7 +442,7 @@ module suisend::core {
             original_amount: record.amount,
             yield_earned,
             total_claimed: total_value,
-            claimed_at: clock::timestamp_ms(clock),
+            claimed_at: clock.timestamp_ms(),
             recipient,
         };
         transfer::public_transfer(receipt, recipient);
@@ -445,7 +453,7 @@ module suisend::core {
             recipient,
             amount: record.amount,
             yield_earned,
-            claimed_at: clock::timestamp_ms(clock),
+            claimed_at: clock.timestamp_ms(),
         });
         // PaymentRecord drops here because it has `drop`.
     }
@@ -495,7 +503,7 @@ module suisend::core {
 
         // Withdraw principal + yield from the vault.
         let coin = yield::withdraw(vault, record.position_id, clock, ctx);
-        let total_value = coin::value(&coin);
+        let total_value = coin.value();
         let yield_earned = total_value - record.amount;
 
         // Send all funds back to the recorded sender.
@@ -507,7 +515,7 @@ module suisend::core {
             sender: record.sender,
             amount: record.amount,
             yield_earned,
-            refunded_at: clock::timestamp_ms(clock),
+            refunded_at: clock.timestamp_ms(),
             initiator: b"sender",
         });
         // PaymentRecord drops here.
@@ -553,12 +561,12 @@ module suisend::core {
         assert!(record.state == STATE_ACTIVE, EWrongState);
 
         // Verify the payment has expired.
-        let now = clock::timestamp_ms(clock);
+        let now = clock.timestamp_ms();
         assert!(now >= record.expiry, ENotYetExpired);
 
         // Withdraw principal + yield.
         let coin = yield::withdraw(vault, record.position_id, clock, ctx);
-        let total_value = coin::value(&coin);
+        let total_value = coin.value();
         let yield_earned = total_value - record.amount;
 
         // Send all funds back to the sender.

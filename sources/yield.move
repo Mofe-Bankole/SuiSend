@@ -24,6 +24,7 @@ module suisend::yield {
     use sui::clock::Clock;
     use sui::coin::{Self, Coin};
     use sui::object::{Self, ID, UID};
+    use sui::sui::SUI;
     use sui::table::{Self, Table};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
@@ -137,6 +138,12 @@ module suisend::yield {
         transfer::share_object(vault);
     }
 
+    /// Test-only wrapper so core_tests can initialize the module.
+    #[test_only]
+    public(package) fun init_for_testing(ctx: &mut TxContext) {
+        init(ctx)
+    }
+
     // ─── Public entry functions ─────────────────────────────────────────────
 
     /// Deposit SUI into a yield protocol.
@@ -166,17 +173,19 @@ module suisend::yield {
         assert!(protocol == PROTOCOL_MOCK || protocol == PROTOCOL_SCALLOP || protocol == PROTOCOL_NAVI, EInvalidProtocol);
 
         // Extract the value from the incoming coin and merge it into the vault.
-        let amount = coin::value(&coin);
+        let amount = coin.value();
         balance::join(&mut vault.balance, coin::into_balance(coin));
 
         // Create a new position record and store it in the vault's table.
-        let position_id = object::new(ctx);
+        let uid = object::new(ctx);
+        let position_id = uid.to_inner();
+        object::delete(uid);
         table::add(
             &mut vault.positions,
             position_id,
             PositionRecord {
                 principal: amount,
-                created_at: clock::timestamp_ms(clock),
+                created_at: clock.timestamp_ms(),
                 protocol,
             },
         );
@@ -216,7 +225,7 @@ module suisend::yield {
         let PositionRecord { principal, created_at, protocol } = table::remove(&mut vault.positions, position_id);
 
         // Calculate elapsed time in milliseconds.
-        let elapsed_ms = clock::timestamp_ms(clock) - created_at;
+        let elapsed_ms = clock.timestamp_ms() - created_at;
 
         // Calculate interest using the formula:
         //   interest = principal * APY_bps * elapsed_ms / MS_IN_YEAR / BPS_DENOM

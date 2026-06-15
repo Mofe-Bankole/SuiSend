@@ -15,7 +15,7 @@ const items = [
 
 export default function MarqueeSection() {
   return (
-    <div className="marquee-section">
+    <div className="marquee-section"> 
       <div className="marquee-fade-l" />
       <div className="marquee-fade-r" />
       <div className="marquee-track">

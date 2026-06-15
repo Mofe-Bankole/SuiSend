@@ -39,7 +39,10 @@ module suisend::walrus {
         // STUB: Return a unique dummy ID. No data is stored.
         // When Walrus integration lands, replace the body with:
         //   walrus::blob::store(note_text, ctx)
-        object::new(ctx)
+        let uid = object::new(ctx);
+        let id = uid.to_inner();
+        object::delete(uid);
+        id
     }
 
     /// Store a claim receipt as a Walrus blob.
@@ -54,7 +57,10 @@ module suisend::walrus {
         ctx: &mut TxContext,
     ): ID {
         // STUB: Return a unique dummy ID.
-        object::new(ctx)
+        let uid = object::new(ctx);
+        let id = uid.to_inner();
+        object::delete(uid);
+        id
     }
 
     /// Read a blob from Walrus (query-only, no state change).

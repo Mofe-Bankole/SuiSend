@@ -13,12 +13,13 @@
 #[test_only]
 module suisend::core_tests {
     use sui::coin::{Self, Coin};
+    use sui::sui::SUI;
+    use sui::clock::{Self, Clock};
     use sui::test_scenario::{Self, Scenario};
-    use sui::transfer;
     use sui::tx_context::TxContext;
 
     use suisend::core::{Self, PaymentBook, PaymentVoucher, ClaimReceipt, RefundAgentCap};
-    use suisend::yield::{Self, YieldVault};
+    use suisend::yield::{Self as yld, YieldVault};
 
     // ─── Test constants ──────────────────────────────────────────────────────
 
@@ -28,81 +29,14 @@ module suisend::core_tests {
     /// Test expiry: 5 minutes = 300,000 ms.
     const TEST_EXPIRY_MS: u64 = 300_000;
 
-    /// Short advance for yield simulation: 1 hour = 3,600,000 ms.
-    const ADVANCE_1H_MS: u64 = 3_600_000;
-
     // ─── Test addresses ──────────────────────────────────────────────────────
 
     const ADMIN: address = @0xA;
     const SENDER: address = @0xB;
     const RECIPIENT: address = @0xC;
     const AGENT: address = @0xD;
-    const EVIL: address = @0xE; // Unauthorized actor for negative tests.
 
-    // ─── Test helpers ────────────────────────────────────────────────────────
 
-    /// Set up the test environment:
-    ///   1. Initialize yield module (creates shared YieldVault).
-    ///   2. Initialize core module (creates shared PaymentBook + capabilities).
-    ///   3. Create and share a Clock for timestamp management.
-    ///   4. Transfer the RefundAgentCap from admin to the agent address.
-    fun setup_test_env(scenario: &mut Scenario) {
-        // Transaction 1: Admin inits the yield module.
-        test_scenario::next_tx(scenario, ADMIN);
-        {
-            let ctx = test_scenario::ctx(scenario);
-            suisend::yield::init(ctx);
-        };
-
-        // Transaction 2: Admin inits the core module.
-        test_scenario::next_tx(scenario, ADMIN);
-        {
-            let ctx = test_scenario::ctx(scenario);
-            suisend::core::init(ctx);
-        };
-
-        // Transaction 3: Admin creates and shares a Clock for time control.
-        test_scenario::next_tx(scenario, ADMIN);
-        {
-            let ctx = test_scenario::ctx(scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            transfer::share_object(clock);
-        };
-
-        // Transaction 4: Admin transfers RefundAgentCap to the agent address.
-        test_scenario::next_tx(scenario, ADMIN);
-        {
-            // The admin owns the RefundAgentCap (was transferred in core::init).
-            let cap = test_scenario::take_from_sender<RefundAgentCap>(scenario);
-            // Update the agent address (this should normally be done via
-            // rotate_refund_agent, but for tests we can transfer directly).
-            // Actually, the cap's `agent` field was set to admin in init.
-            // The admin needs to both update the agent field AND transfer.
-            // For simplicity in tests, we just transfer the cap object
-            // to the agent and let them use it. The agent field check
-            // will pass because... wait, the cap has `agent: address`.
-            // We need to update it or pass a different method.
-            //
-            // For tests, let's just create a new cap with the right agent.
-            // Actually, let's use the rotate_refund_agent function.
-            let book = test_scenario::take_shared<PaymentBook>(scenario);
-            // Wait, rotate_refund_agent only takes &AdminCap and &mut RefundAgentCap.
-            // It doesn't need PaymentBook. Let me fix this.
-            let admin_cap = test_scenario::take_from_sender<AdminCap>(scenario);
-            let mut agent_cap = test_scenario::take_from_sender<RefundAgentCap>(scenario);
-            // We defined AdminCap in core module — need to import it.
-            // And rotate_refund_agent takes &AdminCap and &mut RefundAgentCap.
-            core::rotate_refund_agent(&admin_cap, &mut agent_cap, AGENT);
-            test_scenario::return_to_sender(scenario, admin_cap);
-            test_scenario::return_to_sender(scenario, agent_cap);
-            // Hmm, return_to_sender returns an object to the sender.
-            // Let me check if there's a better pattern.
-            // Actually, we can just transfer the cap to the agent.
-            // But the `agent` field inside still says ADMIN.
-            // Let me just transfer and update.
-        };
-        // This is getting complicated. Let me simplify.
-    }
 
     // ─── Test 1: Full create → claim lifecycle ─────────────────────────────
 
@@ -116,19 +50,19 @@ module suisend::core_tests {
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init(ctx);
+            suisend::yield::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init(ctx);
+            suisend::core::init_for_testing(ctx);
         };
         // Create and share a Clock for time-dependent functions.
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
             let clock = sui::clock::create_for_testing(ctx);
-            transfer::share_object(clock);
+            sui::clock::share_for_testing(clock);
         };
 
         // --- Transaction 2: Sender creates a payment. ---
@@ -159,12 +93,12 @@ module suisend::core_tests {
             );
 
             // Return shared objects so the next transaction can use them.
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
         // Verify the sender now has a PaymentVoucher.
-        assert!(test_scenario::has_most_recent_for_sender<PaymentVoucher>(&scenario, sender), 0);
+        assert!(test_scenario::has_most_recent_for_sender<PaymentVoucher>(&scenario), 0);
 
         // --- Transaction 3: Recipient claims the payment. ---
         let recipient = RECIPIENT;
@@ -178,12 +112,12 @@ module suisend::core_tests {
             let link_hash = b"test_link_hash_001";
             core::claim_payment(&mut book, &mut vault, link_hash, &clock, ctx);
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
         // Verify the recipient received a ClaimReceipt.
-        assert!(test_scenario::has_most_recent_for_sender<ClaimReceipt>(&scenario, recipient), 1);
+        assert!(test_scenario::has_most_recent_for_sender<ClaimReceipt>(&scenario), 1);
 
         // Clean up the test scenario.
         test_scenario::end(scenario);
@@ -200,18 +134,18 @@ module suisend::core_tests {
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init(ctx);
+            suisend::yield::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init(ctx);
+            suisend::core::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
             let clock = sui::clock::create_for_testing(ctx);
-            transfer::share_object(clock);
+            sui::clock::share_for_testing(clock);
         };
 
         // Sender creates a payment.
@@ -234,9 +168,9 @@ module suisend::core_tests {
                 ctx,
             );
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         // Sender refunds using their PaymentVoucher.
@@ -245,21 +179,20 @@ module suisend::core_tests {
             let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
             let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
             let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
             // Take the sender's PaymentVoucher.
             let voucher = test_scenario::take_from_sender<PaymentVoucher>(&mut scenario);
+            let ctx = test_scenario::ctx(&mut scenario);
 
             core::refund_sender(&mut book, &mut vault, voucher, &clock, ctx);
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         // Verify: the sender should have their funds back (or at least
         // the PaymentVoucher should be gone — it was burned).
-        assert!(!test_scenario::has_most_recent_for_sender<PaymentVoucher>(&scenario, sender), 2);
+        assert!(!test_scenario::has_most_recent_for_sender<PaymentVoucher>(&scenario), 2);
 
         test_scenario::end(scenario);
     }
@@ -275,18 +208,18 @@ module suisend::core_tests {
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init(ctx);
+            suisend::yield::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init(ctx);
+            suisend::core::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
             let clock = sui::clock::create_for_testing(ctx);
-            transfer::share_object(clock);
+            sui::clock::share_for_testing(clock);
         };
 
         // Sender creates a payment.
@@ -310,9 +243,9 @@ module suisend::core_tests {
                 ctx,
             );
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         // Advance the clock past expiry.
@@ -320,8 +253,8 @@ module suisend::core_tests {
         test_scenario::next_tx(&mut scenario, admin);
         {
             let mut clock = test_scenario::take_shared<Clock>(&mut scenario);
-            sui::clock::advance_for_testing(&mut clock, TEST_EXPIRY_MS + 1);
-            test_scenario::return_shared(&mut scenario, clock);
+            sui::clock::increment_for_testing(&mut clock, TEST_EXPIRY_MS + 1);
+            test_scenario::return_shared(clock);
         };
 
         // Agent refunds the expired payment.
@@ -337,20 +270,19 @@ module suisend::core_tests {
             let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
             let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
             let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
             // Get the RefundAgentCap from the admin's wallet.
             // (The admin never transferred it, so only admin can use it).
             let cap = test_scenario::take_from_sender<RefundAgentCap>(&mut scenario);
+            let ctx = test_scenario::ctx(&mut scenario);
 
             core::refund_expired(&mut book, &mut vault, b"expiry_test_001", &cap, &clock, ctx);
 
             // The cap was only borrowed (&), so it's returned automatically
             // when the block ends. We need to return it to the sender.
             test_scenario::return_to_sender(&mut scenario, cap);
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         test_scenario::end(scenario);
@@ -359,7 +291,7 @@ module suisend::core_tests {
     // ─── Test 4: Double-claim prevented ─────────────────────────────────────
 
     #[test]
-    #[expected_failure(abort_code = suisend::core::EWrongState)]
+    #[expected_failure(abort_code = suisend::core::ELinkHashNotFound)]
     fun test_double_claim_fails() {
         let admin = ADMIN;
         let mut scenario = test_scenario::begin(admin);
@@ -368,18 +300,18 @@ module suisend::core_tests {
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init(ctx);
+            suisend::yield::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init(ctx);
+            suisend::core::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
             let clock = sui::clock::create_for_testing(ctx);
-            transfer::share_object(clock);
+            sui::clock::share_for_testing(clock);
         };
 
         // Sender creates a payment.
@@ -394,9 +326,9 @@ module suisend::core_tests {
 
             core::create_payment(&mut book, &mut vault, coin, b"double_claim", option::none(), TEST_EXPIRY_MS, 0, &clock, ctx);
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         // Recipient claims (first claim — should succeed).
@@ -410,9 +342,9 @@ module suisend::core_tests {
 
             core::claim_payment(&mut book, &mut vault, b"double_claim", &clock, ctx);
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         // Recipient tries to claim again (second claim — should abort).
@@ -429,9 +361,9 @@ module suisend::core_tests {
             // since the record no longer exists.
             core::claim_payment(&mut book, &mut vault, b"double_claim", &clock, ctx);
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         test_scenario::end(scenario);
@@ -449,18 +381,18 @@ module suisend::core_tests {
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init(ctx);
+            suisend::yield::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init(ctx);
+            suisend::core::init_for_testing(ctx);
         };
         test_scenario::next_tx(&mut scenario, admin);
         {
             let ctx = test_scenario::ctx(&mut scenario);
             let clock = sui::clock::create_for_testing(ctx);
-            transfer::share_object(clock);
+            sui::clock::share_for_testing(clock);
         };
 
         // Sender creates payment with one link_hash.
@@ -475,9 +407,9 @@ module suisend::core_tests {
 
             core::create_payment(&mut book, &mut vault, coin, b"real_hash", option::none(), TEST_EXPIRY_MS, 0, &clock, ctx);
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         // Recipient tries to claim with a DIFFERENT link_hash.
@@ -492,9 +424,9 @@ module suisend::core_tests {
             // Using "wrong_hash" instead of "real_hash" — should abort.
             core::claim_payment(&mut book, &mut vault, b"wrong_hash", &clock, ctx);
 
-            test_scenario::return_shared(&mut scenario, book);
-            test_scenario::return_shared(&mut scenario, vault);
-            test_scenario::return_shared(&mut scenario, clock);
+            test_scenario::return_shared(book);
+            test_scenario::return_shared(vault);
+            test_scenario::return_shared(clock);
         };
 
         test_scenario::end(scenario);

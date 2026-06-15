@@ -1,72 +1,119 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { ConnectButton } from "@mysten/dapp-kit";
+import { ConnectButton, useCurrentAccount, useSuiClient, useSuiClientQuery } from "@mysten/dapp-kit";
+import { AnimatePresence, motion, LayoutGroup } from "framer-motion";
 import SendTab from "@/components/app/SendTab";
 import ClaimTab from "@/components/app/ClaimTab";
 import HistoryTab from "@/components/app/HistoryTab";
+import TxStatusOverlay, { type TxPhase } from "@/components/app/TxStatusOverlay";
+import { mistToSui, shortenAddress } from "@/lib/constants";
 
-const tabs = ["Send", "Claim", "History"];
-
-const tabComponents = [
-  <SendTab key="send" />,
-  <ClaimTab key="claim" />,
-  <HistoryTab key="history" />,
+const tabs = [
+  { key: "send", label: "Send", icon: "→" },
+  { key: "claim", label: "Claim", icon: "↓" },
+  { key: "history", label: "History", icon: "◎" },
 ];
 
+const tabComponents: Record<string, React.ReactNode> = {
+  send: <SendTab key="send" />,
+  claim: <ClaimTab key="claim" />,
+  history: <HistoryTab key="history" />,
+};
+
 export default function AppPage() {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState("send");
+  const [txPhase, setTxPhase] = useState<TxPhase>({ status: "idle" });
+
+  const account = useCurrentAccount();
+  const suiClient = useSuiClient();
+  const { data: balance } = useSuiClientQuery("getBalance", {
+    owner: account?.address ?? "",
+  });
+
+  const activeComponent = useMemo(
+    () => tabComponents[activeTab],
+    [activeTab],
+  );
+
+  const handleCloseOverlay = useCallback(() => {
+    setTxPhase({ status: "idle" });
+  }, []);
+
+  const displayBalance = balance
+    ? `${mistToSui(BigInt(balance.totalBalance)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SUI`
+    : null;
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="flex items-center justify-between px-8 h-16 border-b border-border bg-[rgba(8,8,10,0.92)] backdrop-blur-xl sticky top-0 z-50">
-        <div className="flex items-center gap-8">
+      <header className="flex items-center justify-between px-4 md:px-8 h-14 md:h-16 glass sticky top-0 z-50">
+        <div className="flex items-center gap-6">
           <Link
             href="/"
-            className="flex items-center gap-2 font-display text-[17px] font-semibold tracking-tight text-text-primary no-underline"
+            className="flex items-center gap-2 font-display text-[16px] font-semibold tracking-tight text-text-primary no-underline"
           >
             <div className="w-[7px] h-[7px] rounded-full bg-accent animate-[blink_2.4s_ease-in-out_infinite]" />
             SuiSend
           </Link>
-          <nav className="flex gap-1 max-md:hidden">
-            {tabs.map((tab, i) => (
+          <nav className="hidden md:flex items-center gap-1">
+            {tabs.map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(i)}
-                className={`px-5 py-2 rounded-lg text-[13px] font-medium font-display transition-all cursor-pointer ${
-                  i === activeTab
-                    ? "bg-text-primary text-background"
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`tab-underline px-4 py-1.5 rounded-lg text-[13px] font-medium font-display transition-colors cursor-pointer ${
+                  activeTab === tab.key
+                    ? "active text-text-primary"
                     : "text-text-secondary hover:text-text-primary"
                 }`}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </nav>
         </div>
-        <ConnectButton connectText="Connect wallet" />
+        <div className="flex items-center gap-3">
+          {account && displayBalance && (
+            <div className="balance-badge hidden sm:flex">
+              <div className="balance-dot" />
+              {displayBalance}
+            </div>
+          )}
+          <ConnectButton connectText="Connect" />
+        </div>
       </header>
 
-      <nav className="flex gap-1 px-6 pt-4 md:hidden">
-        {tabs.map((tab, i) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(i)}
-            className={`flex-1 py-2 rounded-lg text-[13px] font-medium font-display transition-all cursor-pointer ${
-              i === activeTab
-                ? "bg-text-primary text-background"
-                : "text-text-secondary border border-border-light"
-            }`}
+      <main className="flex-1 mx-auto w-full max-w-[560px] px-4 md:px-6 py-6 md:py-10 app-main">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            {tab}
+            {activeComponent}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      <nav className="app-bottom-nav md:hidden">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            className={activeTab === tab.key ? "active" : ""}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            <span className="bn-icon">{tab.icon}</span>
+            {tab.label}
           </button>
         ))}
       </nav>
 
-      <main className="flex-1 mx-auto w-full max-w-[640px] px-6 py-10">
-        {tabComponents[activeTab]}
-      </main>
+      <TxStatusOverlay
+        phase={txPhase}
+        onClose={handleCloseOverlay}
+      />
     </div>
   );
 }

@@ -1,20 +1,78 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { useCurrentAccount } from "@mysten/dapp-kit";
-import { createPaymentLink, simulateYieldAccrual } from "@/lib/suisend";
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  useCurrentAccount,
+  useSuiClient,
+  useSuiClientQuery,
+} from "@mysten/dapp-kit";
+import { motion, AnimatePresence } from "framer-motion";
+import { createPaymentLink } from "@/lib/suisend";
+import { getScallopApy } from "@/lib/scallop";
+import { mistToSui } from "@/lib/constants";
+
+const DAY_MS = 86400000;
+
+function calcYield(amount: number, apyBps: number, elapsedMs: number): number {
+  return (amount * apyBps * elapsedMs) / (365 * DAY_MS) / 10000;
+}
+
+const PRESETS = [10, 25, 50, 100, 500];
 
 export default function SendTab() {
   const account = useCurrentAccount();
-  const [amount, setAmount] = useState("100");
+  const suiClient = useSuiClient();
+  const { data: balance } = useSuiClientQuery("getBalance", {
+    owner: account?.address ?? "",
+  });
+
+  const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [apy, setApy] = useState(8.2);
   const [linkShown, setLinkShown] = useState(false);
   const [copied, setCopied] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState("");
+  const [animatingYield, setAnimatingYield] = useState(0);
   const linkRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    getScallopApy(suiClient).then((val) => {
+      if (!cancelled) setApy(val);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [suiClient]);
+
   const rawAmount = parseFloat(amount) || 0;
-  const weeklyYield = simulateYieldAccrual(rawAmount, 7 * 86400000);
+  const apyBps = Math.round(apy * 100);
+  const weeklyYield = calcYield(rawAmount, apyBps, 7 * DAY_MS);
+
+  useEffect(() => {
+    if (rawAmount > 0 && weeklyYield > 0) {
+      const start = performance.now();
+      const duration = 600;
+      const target = weeklyYield;
+      let raf: number;
+      const tick = (now: number) => {
+        const pct = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - pct, 3);
+        setAnimatingYield(target * eased);
+        if (pct < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(raf);
+    }
+    setAnimatingYield(0);
+  }, [rawAmount, weeklyYield]);
+
+  const formatYield = useCallback((val: number) => {
+    if (val >= 1) return val.toFixed(4);
+    if (val >= 0.001) return val.toFixed(6);
+    if (val <= 0) return "0";
+    return val.toFixed(8);
+  }, []);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/[^0-9.]/g, "");
@@ -25,10 +83,17 @@ export default function SendTab() {
     }
   };
 
+  const handlePreset = (val: number) => {
+    setAmount(String(val));
+    if (linkShown) {
+      setLinkShown(false);
+      setCopied(false);
+    }
+  };
+
   const handleSend = () => {
     if (!account || rawAmount <= 0) return;
-    const sender = account.address;
-    const payment = createPaymentLink(sender, rawAmount, note);
+    const payment = createPaymentLink(account.address, rawAmount, note);
     setGeneratedUrl(payment.claimUrl);
     setLinkShown(true);
     setTimeout(() => {
@@ -38,43 +103,84 @@ export default function SendTab() {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(
-        `https://${generatedUrl}`,
-      );
+      await navigator.clipboard.writeText(`https://${generatedUrl}`);
     } catch {}
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const suiBalance = balance ? mistToSui(BigInt(balance.totalBalance)) : 0;
+  const canSend = rawAmount > 0 && rawAmount <= suiBalance;
+
   if (!account) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-12 h-12 rounded-xl border border-border-light flex items-center justify-center text-[22px] mb-5">
-          →
-        </div>
-        <h3 className="font-display text-xl font-semibold mb-2 tracking-tight">
-          Connect your wallet to send
-        </h3>
-        <p className="text-text-secondary text-sm max-w-[300px]">
+      <div className="empty-state">
+        <div className="empty-icon">→</div>
+        <div className="empty-title">Connect your wallet</div>
+        <div className="empty-desc">
           Use the button in the top-right to connect. Your funds never leave your
           wallet until you send.
-        </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="font-display text-xl font-bold tracking-tight">
+            Send money
+          </h2>
+          <p className="text-text-secondary text-[13px] mt-0.5">
+            Create a payment link that earns yield
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] uppercase tracking-[0.06em] text-text-muted font-medium">
+            Balance
+          </div>
+          <div className="font-display text-[15px] font-semibold tabular-nums">
+            {suiBalance.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 4,
+            })}{" "}
+            <span className="text-text-secondary text-[13px]">SUI</span>
+          </div>
+        </div>
+      </div>
+
       <div className="app-field">
         <div className="app-flabel">Amount (SUI)</div>
-        <input
-          className="app-finput"
-          type="text"
-          inputMode="decimal"
-          value={amount}
-          onChange={handleAmountChange}
-          placeholder="0.00"
-        />
+        <div className="relative">
+          <input
+            className="app-finput !text-[28px] !font-bold !tracking-tight !pl-4 !pr-14 !py-4"
+            type="text"
+            inputMode="decimal"
+            value={amount}
+            onChange={handleAmountChange}
+            placeholder="0.00"
+          />
+          <div className="absolute right-[14px] top-1/2 -translate-y-1/2 text-text-muted font-display text-[13px] font-semibold pointer-events-none">
+            SUI
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-1.5 mb-4">
+        {PRESETS.map((val) => (
+          <button
+            key={val}
+            onClick={() => handlePreset(val)}
+            className={`flex-1 py-2 rounded-lg text-[12px] font-medium font-display cursor-pointer transition-all ${
+              parseFloat(amount) === val
+                ? "bg-accent text-background"
+                : "bg-bg-card border border-border-light text-text-secondary hover:border-text-muted"
+            }`}
+          >
+            {val} SUI
+          </button>
+        ))}
       </div>
 
       <div className="app-field">
@@ -83,39 +189,98 @@ export default function SendTab() {
           className="app-finput"
           type="text"
           value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={(e) => {
+            if (e.target.value.length <= 120) setNote(e.target.value);
+          }}
           placeholder="What's this for?"
-          maxLength={120}
         />
+        <div className="text-right text-[10px] text-text-muted mt-1">
+          {note.length}/120
+        </div>
       </div>
 
-      <div className="yield-box">
-        <div className="yb-left">Yield after 7 days (8.2% APY)</div>
-        <div className="yb-right">
-          +{weeklyYield < 0.0001 ? "< 0.0001" : weeklyYield.toFixed(weeklyYield >= 1 ? 2 : weeklyYield >= 0.01 ? 4 : 6)} SUI
+      <div className="yield-box-premium">
+        <div className="ybp-row">
+          <span className="ybp-label">Estimated yield in 7 days</span>
+          <span className="ybp-value">
+            {rawAmount > 0 ? (
+              <>
+                +{formatYield(animatingYield)} SUI
+              </>
+            ) : (
+              "—"
+            )}
+          </span>
+        </div>
+        <div className="ybp-sub">
+          Based on real Scallop APY:{" "}
+          <span className="text-accent font-semibold">{apy.toFixed(2)}%</span>
         </div>
       </div>
 
       <button
-        className="app-btn"
+        className="btn-gradient"
         onClick={handleSend}
-        disabled={rawAmount <= 0}
-        style={{ opacity: rawAmount <= 0 ? 0.4 : 1, cursor: rawAmount <= 0 ? "not-allowed" : "pointer" }}
+        disabled={!canSend}
       >
-        Generate payment link →
+        {rawAmount <= 0
+          ? "Enter an amount"
+          : !canSend
+            ? "Insufficient balance"
+            : "Generate payment link →"}
       </button>
 
-      <div className={`link-gen ${linkShown ? "show" : ""}`} ref={linkRef}>
-        <div className="lg-label">Payment link ready</div>
-        <div className="lg-url" onClick={handleCopy} title="Click to copy">
-          {generatedUrl}
-        </div>
-        {copied && <div className="lg-copied" style={{ display: "block" }}>Copied to clipboard</div>}
-        <p className="text-text-muted text-[11px] mt-4 leading-relaxed">
-          Share this link with anyone. They only need the link to claim — no wallet required
-          on their end. Funds you send earn yield until claimed.
-        </p>
-      </div>
+      <AnimatePresence>
+        {linkShown && (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="link-gen-premium show"
+            ref={linkRef}
+          >
+            <div className="lgp-header">
+              <div className="lgp-icon">✓</div>
+              <div className="lgp-title">Payment link ready</div>
+            </div>
+            <div className="lgp-url-wrap">
+              <div className="lgp-url" onClick={handleCopy} title="Click to copy">
+                {generatedUrl}
+              </div>
+              <button
+                className={`lgp-copy ${copied ? "copied" : ""}`}
+                onClick={handleCopy}
+                aria-label="Copy link"
+              >
+                {copied ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            {copied && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-accent text-[11px] mt-2 font-medium"
+              >
+                Copied to clipboard
+              </motion.div>
+            )}
+            <div className="lgp-note">
+              Share this link with anyone. They only need the link to claim — no
+              wallet required on their end. Funds earn yield until claimed.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
