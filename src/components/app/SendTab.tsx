@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createPaymentLink } from "@/lib/suisend";
 import { getScallopApy } from "@/lib/scallop";
 import { mistToSui } from "@/lib/constants";
+import { storeText } from "@/lib/walrus";
 
 const DAY_MS = 86400000;
 
@@ -33,6 +34,8 @@ export default function SendTab() {
   const [copied, setCopied] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState("");
   const [animatingYield, setAnimatingYield] = useState(0);
+  const [walrusBlobId, setWalrusBlobId] = useState<string | null>(null);
+  const [walrusUploading, setWalrusUploading] = useState(false);
   const linkRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,9 +94,26 @@ export default function SendTab() {
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!account || rawAmount <= 0) return;
+
+    let uploadResult: { blobId: string } | null = null;
+    if (note.trim()) {
+      setWalrusUploading(true);
+      try {
+        uploadResult = await storeText(note.trim(), 5, "testnet");
+        setWalrusBlobId(uploadResult.blobId);
+      } catch (e) {
+        console.warn("Walrus upload failed, continuing without blob:", e);
+      } finally {
+        setWalrusUploading(false);
+      }
+    }
+
     const payment = createPaymentLink(account.address, rawAmount, note);
+    if (uploadResult) {
+      payment.walrusBlobId = uploadResult.blobId;
+    }
     setGeneratedUrl(payment.claimUrl);
     setLinkShown(true);
     setTimeout(() => {
@@ -221,13 +241,15 @@ export default function SendTab() {
       <button
         className="btn-gradient"
         onClick={handleSend}
-        disabled={!canSend}
+        disabled={!canSend || walrusUploading}
       >
-        {rawAmount <= 0
-          ? "Enter an amount"
-          : !canSend
-            ? "Insufficient balance"
-            : "Generate payment link →"}
+        {walrusUploading
+          ? "Uploading note to Walrus..."
+          : rawAmount <= 0
+            ? "Enter an amount"
+            : !canSend
+              ? "Insufficient balance"
+              : "Generate payment link →"}
       </button>
 
       <AnimatePresence>
@@ -273,6 +295,16 @@ export default function SendTab() {
               >
                 Copied to clipboard
               </motion.div>
+            )}
+            {walrusBlobId && (
+              <div className="mt-3 p-2 rounded-lg bg-bg-card border border-border-light">
+                <div className="text-[10px] uppercase tracking-[0.06em] text-text-muted font-medium mb-0.5">
+                  Note stored on Walrus
+                </div>
+                <div className="text-[11px] font-mono text-accent break-all">
+                  {walrusBlobId}
+                </div>
+              </div>
             )}
             <div className="lgp-note">
               Share this link with anyone. They only need the link to claim — no

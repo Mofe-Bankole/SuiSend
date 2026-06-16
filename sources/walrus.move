@@ -1,72 +1,44 @@
-/// Walrus blob storage module for SuiSend (stub).
+/// Walrus blob storage module for SuiSend.
 ///
-/// Stores payment metadata (sender's note, claim receipt) as Walrus blobs.
-/// Each blob is identified by a unique `BlobID` that is stored in the
-/// corresponding `PaymentRecord`.
+/// Walrus upload is an **off-chain** operation — the frontend uploads note
+/// text (and optionally claim receipts) to the Walrus HTTP publisher, then
+/// passes the resulting blob ID as raw bytes into the on-chain contract.
 ///
-/// ## Current status
-/// This is a STUB for the devnet MVP. The Walrus SDK integration will be
-/// added as a separate tracked step. For now:
-///   - `store_note` is a no-op that returns a dummy ID
-///   - `store_receipt` is a no-op that returns a dummy ID
+/// ## Lifecycle
+/// 1. Sender writes a note in the UI.
+/// 2. Frontend uploads the note to Walrus via `PUT /v1/blobs?epochs=N`.
+/// 3. Frontend captures the `blobId` from the publisher response.
+/// 4. Sender calls `create_payment_scallop(..., note_blob_id = some(blobId))`.
+/// 5. On claim, the frontend reads the blob from Walrus via
+///    `GET /v1/blobs/{blobId}` and displays the note.
 ///
-/// ## Migration path
-/// When the Walrus integration is ready:
-///   1. Import the Walrus Move SDK (walrus::blob)
-///   2. Replace dummy logic with real blob store/read calls
-///   3. Remove this comment and the stub functions
+/// ## Blob ID type
+/// Walrus blob IDs are base64url-encoded strings in transit. On chain they
+/// are stored as raw `vector<u8>`. Convert at the API boundary.
+///
+/// ## Endpoints (testnet)
+/// - Publisher:  https://publisher.walrus-testnet.walrus.space
+/// - Aggregator: https://aggregator.walrus-testnet.walrus.space
+///
+/// ## Epochs
+/// 1 epoch ≈ 1 day on testnet, ~2 weeks on mainnet. Use 5-12 epochs for
+/// short-lived payment notes; use permanent (default) for claim receipts.
 module suisend::walrus {
-    use sui::object::{Self, ID, UID};
-    use sui::tx_context::TxContext;
-
-    /// Error: Walrus blob storage not yet implemented.
-    const ENotImplemented: u64 = 1;
-
-    /// Store a payment note as a Walrus blob.
+    /// A typed wrapper around a Walrus blob ID stored on chain.
     ///
-    /// In the stub version, this returns a newly generated ID without
-    /// actually storing anything. The caller stores this ID in the
-    /// PaymentRecord's `note_blob_id` field.
-    ///
-    /// ## Real implementation (future)
-    /// ```move
-    /// walrus::blob::store(sender_note, ctx)
-    /// ```
-    public fun store_note(
-        _note_text: vector<u8>,
-        ctx: &mut TxContext,
-    ): ID {
-        // STUB: Return a unique dummy ID. No data is stored.
-        // When Walrus integration lands, replace the body with:
-        //   walrus::blob::store(note_text, ctx)
-        let uid = object::new(ctx);
-        let id = uid.to_inner();
-        object::delete(uid);
-        id
+    /// Using a fresh struct instead of raw `vector<u8>` makes Object
+    /// inspection more readable and prevents type confusion.
+    public struct WalrusBlobId has store, copy, drop {
+        bytes: vector<u8>,
     }
 
-    /// Store a claim receipt as a Walrus blob.
-    ///
-    /// The receipt includes: payment link_hash, original amount, yield earned,
-    /// total claimed, timestamp, and recipient address. This provides an
-    /// immutable off-chain record.
-    ///
-    /// In the stub version, returns a newly generated dummy ID.
-    public fun store_receipt(
-        _receipt_data: vector<u8>,
-        ctx: &mut TxContext,
-    ): ID {
-        // STUB: Return a unique dummy ID.
-        let uid = object::new(ctx);
-        let id = uid.to_inner();
-        object::delete(uid);
-        id
+    /// Wrap raw blob ID bytes into a typed WalrusBlobId.
+    public fun from_bytes(bytes: vector<u8>): WalrusBlobId {
+        WalrusBlobId { bytes }
     }
 
-    /// Read a blob from Walrus (query-only, no state change).
-    ///
-    /// Stub: asserts false since the data doesn't exist yet.
-    public fun read_blob(_blob_id: ID): vector<u8> {
-        abort ENotImplemented
+    /// Unwrap a WalrusBlobId back to raw bytes for off-chain use.
+    public fun to_bytes(id: &WalrusBlobId): vector<u8> {
+        id.bytes
     }
 }

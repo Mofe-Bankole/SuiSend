@@ -227,14 +227,21 @@ module suisend::yield {
         // Calculate elapsed time in milliseconds.
         let elapsed_ms = clock.timestamp_ms() - created_at;
 
-        // Calculate interest using the formula:
-        //   interest = principal * APY_bps * elapsed_ms / MS_IN_YEAR / BPS_DENOM
+        // Calculate mock interest using the formula:
+        //   interest = principal * APY_bps / BPS_DENOM * elapsed_ms / MS_IN_YEAR
         //
-        // This gives a linear proration of the annual percentage yield.
+        // NOTE: The mock vault holds only the deposited principal — it cannot
+        // conjure SUI out of thin air to pay interest. The interest formula is
+        // preserved here for audit/inspection but the result is set to zero so
+        // that withdraw returns only the principal. Real yield (Scallop, Navi)
+        // will be earned on-protocol and the extra SUI will be available in the
+        // vault at withdrawal time.
+        //
         // Example: 100 SUI deposited for 7 days at 8.2% APY:
-        //   interest = 100 * 820 * 604800000 / 31536000000 / 10000
+        //   interest = 100SUI * 820 / 10000 * 604800000 / 31536000000
         //           ≈ 0.1575 SUI
-        let interest = principal * MOCK_APY_BPS * elapsed_ms / MS_IN_YEAR / BPS_DENOM;
+        let _interest = principal * MOCK_APY_BPS / BPS_DENOM * elapsed_ms / MS_IN_YEAR;
+        let interest = 0;
 
         // Total amount to return = principal + interest.
         // Use a safe add that aborts on overflow.

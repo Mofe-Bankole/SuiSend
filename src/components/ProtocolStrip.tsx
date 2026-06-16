@@ -4,7 +4,6 @@ const protocols = [
   "Next.js 15",
   "Fastify",
   "@mysten/dapp-kit",
-  "OpenCode",
 ];
 
 export default function ProtocolStrip() {

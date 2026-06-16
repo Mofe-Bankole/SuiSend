@@ -15,6 +15,7 @@ export interface PaymentLink {
   expiresAt: number;
   claimUrl: string;
   claimedAt?: number;
+  walrusBlobId?: string;
 }
 
 export interface ClaimRecord {

@@ -35,6 +35,12 @@ module suisend::core {
     use suisend::yield;
     use suisend::yield::YieldVault;
 
+    use protocol::market::Market;
+    use protocol::version::Version;
+
+    use suisend::yield_scallop;
+    use suisend::yield_scallop::ScallopYieldVault;
+
     // ─── Constants ───────────────────────────────────────────────────────────
 
     /// Maximum lockup period: 30 days in milliseconds.
@@ -127,8 +133,9 @@ module suisend::core {
         expiry: u64,
         /// Current state: ACTIVE | CLAIMED | REFUNDED.
         state: u8,
-        /// Optional Walrus blob ID for the sender's note.
-        note_blob_id: Option<ID>,
+        /// Optional Walrus blob ID (raw bytes) for the sender's note.
+        /// Upload the note to Walrus off-chain, store the blob ID here.
+        note_blob_id: Option<vector<u8>>,
         /// Address of the recipient — set when the payment is claimed.
         /// `None` while the payment is active and unclaimed.
         recipient: Option<address>,
@@ -304,8 +311,9 @@ module suisend::core {
     /// - `link_hash`: 32-byte unique identifier for the claim URL. The sender
     ///   generates this off-chain (crypto random). Must not collide with any
     ///   existing link_hash in the PaymentBook.
-    /// - `note_blob_id`: Optional Walrus blob ID for a text note from the
-    ///   sender. Pass `option::none()` if no note.
+    /// - `note_blob_id`: Optional Walrus blob ID (raw bytes) for a text note
+    ///   from the sender. Upload the note to Walrus off-chain, then pass the
+    ///   blob ID here. Pass `option::none()` if no note.
     /// - `expiry_offset_ms`: How long (in ms) the payment stays active before
     ///   refund is allowed. The frontend typically passes 30 days.
     /// - `protocol`: Which yield protocol to deposit into.
@@ -320,7 +328,7 @@ module suisend::core {
         vault: &mut YieldVault,
         coin: Coin<SUI>,
         link_hash: vector<u8>,
-        note_blob_id: Option<ID>,
+        note_blob_id: Option<vector<u8>>,
         expiry_offset_ms: u64,
         protocol: u8,
         clock: &Clock,
@@ -656,5 +664,185 @@ module suisend::core {
     /// Get the number of active payments in the book.
     public fun active_payment_count(book: &PaymentBook): u64 {
         table::length(&book.payments)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  SCALLOP-SPECIFIC PAYMENT FUNCTIONS
+    //
+    //  These are identical in logic to the mock-path functions above but
+    //  operate on a `ScallopYieldVault` instead of `YieldVault`, and
+    //  pass Scallop's `Version` and `Market` shared objects through to
+    //  `yield_scallop::deposit_scallop` / `withdraw_scallop`.
+    //
+    //  Use these for mainnet deployments. The mock versions are kept
+    //  for devnet/testing.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Create a payment using Scallop's lending pool.
+    ///
+    /// Same as `create_payment` but uses `ScallopYieldVault` and requires
+    /// Scallop's `Version` and `Market` shared objects for on-chain mint.
+    public entry fun create_payment_scallop(
+        book: &mut PaymentBook,
+        vault: &mut ScallopYieldVault,
+        coin: Coin<SUI>,
+        link_hash: vector<u8>,
+        note_blob_id: Option<vector<u8>>,
+        expiry_offset_ms: u64,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(!table::contains(&book.payments, link_hash), ELinkHashAlreadyExists);
+        assert!(expiry_offset_ms >= MIN_LOCKUP_MS, EInvalidExpiry);
+        let actual_expiry_offset = if (expiry_offset_ms > MAX_LOCKUP_MS) {
+            MAX_LOCKUP_MS
+        } else {
+            expiry_offset_ms
+        };
+
+        let amount = coin.value();
+        let position_id = yield_scallop::deposit_scallop(vault, coin, version, market, clock, ctx);
+
+        let now = clock.timestamp_ms();
+        table::add(&mut book.payments, link_hash, PaymentRecord {
+            link_hash: copy link_hash,
+            sender: tx_context::sender(ctx),
+            amount,
+            position_id,
+            protocol: 1,
+            created_at: now,
+            expiry: now + actual_expiry_offset,
+            state: STATE_ACTIVE,
+            note_blob_id,
+            recipient: option::none(),
+        });
+
+        let voucher = PaymentVoucher {
+            id: object::new(ctx),
+            sender: tx_context::sender(ctx),
+            link_hash,
+        };
+        transfer::public_transfer(voucher, tx_context::sender(ctx));
+
+        event::emit(PaymentCreatedEvent {
+            link_hash: copy link_hash,
+            sender: tx_context::sender(ctx),
+            amount,
+            protocol: 1,
+            created_at: now,
+            expiry: now + actual_expiry_offset,
+        });
+    }
+
+    /// Claim a payment using Scallop's lending pool.
+    public entry fun claim_payment_scallop(
+        book: &mut PaymentBook,
+        vault: &mut ScallopYieldVault,
+        link_hash: vector<u8>,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        let record = table::remove(&mut book.payments, link_hash);
+        assert!(record.state == STATE_ACTIVE, EWrongState);
+
+        let recipient = tx_context::sender(ctx);
+        let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = total_value - record.amount;
+
+        transfer::public_transfer(coin, recipient);
+
+        let receipt = ClaimReceipt {
+            id: object::new(ctx),
+            payment_link_hash: link_hash,
+            original_amount: record.amount,
+            yield_earned,
+            total_claimed: total_value,
+            claimed_at: clock.timestamp_ms(),
+            recipient,
+        };
+        transfer::public_transfer(receipt, recipient);
+
+        event::emit(PaymentClaimedEvent {
+            link_hash,
+            recipient,
+            amount: record.amount,
+            yield_earned,
+            claimed_at: clock.timestamp_ms(),
+        });
+    }
+
+    /// Refund a payment via sender voucher using Scallop's lending pool.
+    public entry fun refund_sender_scallop(
+        book: &mut PaymentBook,
+        vault: &mut ScallopYieldVault,
+        voucher: PaymentVoucher,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(voucher.sender == tx_context::sender(ctx), EUnauthorized);
+
+        let link_hash = voucher.link_hash;
+        let PaymentVoucher { id: voucher_id, sender: _, link_hash: _ } = voucher;
+        object::delete(voucher_id);
+
+        let record = table::remove(&mut book.payments, link_hash);
+        assert!(record.state == STATE_ACTIVE, EWrongState);
+
+        let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = total_value - record.amount;
+
+        transfer::public_transfer(coin, record.sender);
+
+        event::emit(PaymentRefundedEvent {
+            link_hash,
+            sender: record.sender,
+            amount: record.amount,
+            yield_earned,
+            refunded_at: clock.timestamp_ms(),
+            initiator: b"sender",
+        });
+    }
+
+    /// Refund an expired payment (agent-initiated) using Scallop's lending pool.
+    public entry fun refund_expired_scallop(
+        book: &mut PaymentBook,
+        vault: &mut ScallopYieldVault,
+        link_hash: vector<u8>,
+        cap: &RefundAgentCap,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(cap.agent == tx_context::sender(ctx), EUnauthorized);
+
+        let record = table::remove(&mut book.payments, link_hash);
+        assert!(record.state == STATE_ACTIVE, EWrongState);
+
+        let now = clock.timestamp_ms();
+        assert!(now >= record.expiry, ENotYetExpired);
+
+        let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = total_value - record.amount;
+
+        transfer::public_transfer(coin, record.sender);
+
+        event::emit(PaymentRefundedEvent {
+            link_hash,
+            sender: record.sender,
+            amount: record.amount,
+            yield_earned,
+            refunded_at: now,
+            initiator: b"agent",
+        });
     }
 }

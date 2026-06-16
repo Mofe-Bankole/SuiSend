@@ -6,10 +6,15 @@ license = "MIT"
 authors = ["SuiSend Team"]
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
 
 [addresses]
 suisend = "0x0"
 
 [dev-addresses]
 suisend = "0xCAFE"
+
+[dependencies.ScallopProtocol]
+git = "https://github.com/scallop-io/sui-lending-protocol.git"
+subdir = "contracts/protocol"
+rev = "main"

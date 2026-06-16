@@ -10,6 +10,7 @@ import {
 } from "@/lib/suisend";
 import { getScallopApy } from "@/lib/scallop";
 import { useNow, timeAgo, timeUntil } from "@/hooks/useNow";
+import { readText } from "@/lib/walrus";
 import type { PaymentLink } from "@/lib/suisend";
 
 export default function ClaimTab() {
@@ -115,6 +116,19 @@ export default function ClaimTab() {
     setAnimatingYield(0);
   }, [foundPayment?.status, dueYield, foundPayment?.linkHash]);
 
+  const [walrusNote, setWalrusNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (foundPayment?.walrusBlobId) {
+      setWalrusNote(null);
+      readText(foundPayment.walrusBlobId, "testnet")
+        .then((text) => setWalrusNote(text))
+        .catch(() => setWalrusNote(null));
+    } else {
+      setWalrusNote(null);
+    }
+  }, [foundPayment?.walrusBlobId, foundPayment?.linkHash]);
+
   const formatYield = useCallback((val: number) => {
     if (val >= 1) return val.toFixed(4);
     if (val >= 0.001) return val.toFixed(6);
@@ -192,6 +206,21 @@ export default function ClaimTab() {
               {foundPayment.note && (
                 <div className="text-sm text-text-secondary mb-3 italic">
                   &ldquo;{foundPayment.note}&rdquo;
+                </div>
+              )}
+              {walrusNote && (
+                <div className="glass-card p-2 mb-3">
+                  <div className="text-[10px] uppercase tracking-[0.06em] text-text-muted font-medium mb-0.5">
+                    Note (from Walrus)
+                  </div>
+                  <div className="text-sm text-text-secondary italic">
+                    &ldquo;{walrusNote}&rdquo;
+                  </div>
+                </div>
+              )}
+              {foundPayment.walrusBlobId && !walrusNote && (
+                <div className="text-[10px] text-text-muted mb-3">
+                  Fetching note from Walrus...
                 </div>
               )}
 
