@@ -1,10 +1,10 @@
 "use client";
 
-const TESTNET_PUBLISHER = "https://publisher.walrus-testnet.walrus.space";
-const TESTNET_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
+export const TESTNET_PUBLISHER = "https://publisher.walrus-testnet.walrus.space";
+export const TESTNET_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
 
-const MAINNET_PUBLISHER = "https://publisher.walrus.space";
-const MAINNET_AGGREGATOR = "https://aggregator.walrus.space";
+export const MAINNET_PUBLISHER = "https://publisher.walrus.space";
+export const MAINNET_AGGREGATOR = "https://aggregator.walrus.space";
 
 export interface WalrusStoreResult {
   blobId: string;
