@@ -1,5 +1,18 @@
 "use client";
 
+import { Transaction } from "@mysten/sui/transactions";
+import { fromHex, toHex } from "@mysten/sui/utils";
+import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import {
+  SUISEND_PACKAGE_ID,
+  PAYMENT_BOOK_ID,
+  SCALLOP_YIELD_VAULT_ID,
+  SCALLOP_VERSION_ID,
+  SCALLOP_MARKET_ID,
+  EXPIRY_DAYS,
+} from "./constants";
+import { getAppUrl } from "./url";
+
 export type PaymentStatus = "pending" | "claimed" | "refunded" | "expired";
 
 export interface PaymentLink {
@@ -27,199 +40,232 @@ export interface ClaimRecord {
   claimedAt: number;
 }
 
-const APY_BPS = 820;
-const BPS_DENOM = 10000;
-const DAY_MS = 86400000;
-const EXPIRY_DAYS = 14;
-const MS_IN_YEAR = 365 * DAY_MS;
+const CLOCK_ID = "0x0000000000000000000000000000000000000000000000000000000000000006";
 
-function randomHash(): string {
+export function randomHashHex(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return "0x" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return "0x" + toHex(bytes);
 }
 
-function genId(): string {
-  return Math.random().toString(36).substring(2, 10);
+export function buildCreatePaymentScallopPTB(params: {
+  amount: bigint;
+  linkHashHex: string;
+  noteBlobIdHex?: string;
+  expiryOffsetMs?: number;
+}): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudgetIfNotSet(BigInt(20000000));
+  const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.amount)]);
+
+  const noteBlobId = params.noteBlobIdHex
+    ? tx.pure.option("vector<u8>", Array.from(fromHex(params.noteBlobIdHex.replace("0x", ""))))
+    : tx.pure.option("vector<u8>", []);
+
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::create_payment_scallop`,
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.object(SCALLOP_YIELD_VAULT_ID),
+      coin,
+      tx.pure.vector("u8", Array.from(fromHex(params.linkHashHex.replace("0x", "")))),
+      noteBlobId,
+      tx.pure.u64(params.expiryOffsetMs ?? EXPIRY_DAYS * 86400 * 1000),
+      tx.object(SCALLOP_VERSION_ID),
+      tx.object(SCALLOP_MARKET_ID),
+      tx.object(CLOCK_ID),
+    ],
+  });
+
+  return tx;
 }
 
-function calcYield(amount: number, elapsedMs: number): number {
-  return (amount * APY_BPS * elapsedMs) / MS_IN_YEAR / BPS_DENOM;
+export function buildClaimPaymentScallopPTB(linkHashHex: string): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudgetIfNotSet(BigInt(20000000));
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::claim_payment_scallop`,
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.object(SCALLOP_YIELD_VAULT_ID),
+      tx.pure.vector("u8", Array.from(fromHex(linkHashHex.replace("0x", "")))),
+      tx.object(SCALLOP_VERSION_ID),
+      tx.object(SCALLOP_MARKET_ID),
+      tx.object(CLOCK_ID),
+    ],
+  });
+  return tx;
+}
+
+export interface PaymentLookup {
+  exists: boolean;
+  amount?: bigint;
+  expiry?: bigint;
+  state?: number;
+  sender?: string;
+}
+
+function decodeBool(bytes: Uint8Array): boolean {
+  return bytes[0] === 1;
+}
+
+function decodeU64(bytes: Uint8Array): bigint {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return view.getBigUint64(0, true);
+}
+
+function decodeU8(bytes: Uint8Array): number {
+  return bytes[0];
+}
+
+function decodeAddress(bytes: Uint8Array): string {
+  return "0x" + toHex(bytes);
+}
+
+export async function lookupPayment(
+  suiClient: SuiJsonRpcClient,
+  linkHashHex: string,
+): Promise<PaymentLookup> {
+  const linkHashBytes = fromHex(linkHashHex.replace("0x", ""));
+  const dummySender = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::payment_exists`,
+    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+  });
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::payment_amount`,
+    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+  });
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::payment_expiry`,
+    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+  });
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::payment_state`,
+    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+  });
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::payment_sender`,
+    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+  });
+
+  try {
+    const result = await suiClient.devInspectTransactionBlock({
+      transactionBlock: tx,
+      sender: dummySender,
+    });
+
+    if (!result.results) return { exists: false };
+
+    const bytes0 = result.results[0]?.returnValues?.[0]?.[0];
+    const exists = bytes0 ? decodeBool(new Uint8Array(bytes0)) : false;
+
+    if (!exists) return { exists: false };
+
+    const bytes1 = result.results[1]?.returnValues?.[0]?.[0];
+    const bytes2 = result.results[2]?.returnValues?.[0]?.[0];
+    const bytes3 = result.results[3]?.returnValues?.[0]?.[0];
+    const bytes4 = result.results[4]?.returnValues?.[0]?.[0];
+
+    return {
+      exists: true,
+      amount: bytes1 ? decodeU64(new Uint8Array(bytes1)) : undefined,
+      expiry: bytes2 ? decodeU64(new Uint8Array(bytes2)) : undefined,
+      state: bytes3 ? decodeU8(new Uint8Array(bytes3)) : undefined,
+      sender: bytes4 ? decodeAddress(new Uint8Array(bytes4)) : undefined,
+    };
+  } catch (e) {
+    console.error("lookupPayment error:", e);
+    return { exists: false };
+  }
+}
+
+export async function queryUserSentPayments(
+  suiClient: SuiJsonRpcClient,
+  address: string,
+): Promise<PaymentLink[]> {
+  const eventResult = await suiClient.queryEvents({
+    query: {
+      MoveEventType: `${SUISEND_PACKAGE_ID}::core::PaymentCreatedEvent`,
+    },
+    limit: 50,
+  });
+
+  return eventResult.data
+    .filter((e) => {
+      const parsed = e.parsedJson as Record<string, unknown> | null;
+      return parsed?.sender === address;
+    })
+    .map((e) => {
+      const parsed = e.parsedJson as Record<string, unknown>;
+      const amount = Number(parsed.amount ?? 0);
+      const createdAt = Number(parsed.created_at ?? 0);
+      const expiry = Number(parsed.expiry ?? 0);
+      const linkHash = parsed.link_hash as string;
+      const shortHash = linkHash
+        ? linkHash.substring(0, 10) + "..." + linkHash.substring(linkHash.length - 6)
+        : "";
+
+      return {
+        id: e.id.txDigest,
+        linkHash,
+        sender: (parsed.sender as string) ?? "",
+        amount: formatSui(amount),
+        numericAmount: amount / 1e9,
+        note: "",
+        status: "pending" as PaymentStatus,
+        yieldEarned: "0",
+        createdAt,
+        expiresAt: expiry,
+        claimUrl: `${getAppUrl()}/claim/${shortHash}`,
+      };
+    });
+}
+
+export async function queryUserClaimReceipts(
+  suiClient: SuiJsonRpcClient,
+  address: string,
+): Promise<ClaimRecord[]> {
+  const objects = await suiClient.getOwnedObjects({
+    owner: address,
+    filter: { StructType: `${SUISEND_PACKAGE_ID}::core::ClaimReceipt` },
+    limit: 50,
+  });
+
+  const claims: ClaimRecord[] = [];
+  for (const obj of objects.data) {
+    if (!obj.data?.objectId) continue;
+    const receipt = await suiClient.getObject({
+      id: obj.data.objectId,
+      options: { showContent: true },
+    });
+    const content = receipt.data?.content;
+    if (content?.dataType !== "moveObject") continue;
+    const fields = content.fields as Record<string, unknown>;
+    claims.push({
+      id: obj.data.objectId,
+      linkHash: (fields.payment_link_hash as string) ?? "",
+      claimer: (fields.recipient as string) ?? "",
+      amount: formatSui(Number(fields.total_claimed ?? 0)),
+      yieldEarned: formatSui(Number(fields.yield_earned ?? 0)),
+      claimedAt: Number(fields.claimed_at ?? 0),
+    });
+  }
+  return claims;
 }
 
 function formatSui(val: number): string {
-  if (val >= 1000) return val.toFixed(0);
-  if (val >= 1) return val.toFixed(2);
-  if (val >= 0.01) return val.toFixed(4);
-  return val.toFixed(6);
+  const sui = val / 1e9;
+  if (sui >= 1000) return sui.toFixed(0) + " SUI";
+  if (sui >= 1) return sui.toFixed(2) + " SUI";
+  if (sui >= 0.01) return sui.toFixed(4) + " SUI";
+  return sui.toFixed(6) + " SUI";
 }
 
 export function formatYield(val: number): string {
   if (val >= 1) return val.toFixed(4);
   if (val >= 0.001) return val.toFixed(6);
   return val.toFixed(8);
-}
-
-const paymentStore: PaymentLink[] = [
-  {
-    id: "demo1",
-    linkHash: "0x4f2a1b3c8d9e0f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3",
-    sender: "0xabc...def",
-    amount: "100.00 SUI",
-    numericAmount: 100,
-    note: "For the Lagos trip",
-    status: "pending",
-    yieldEarned: "0.0000457",
-    createdAt: Date.now() - 3 * DAY_MS,
-    expiresAt: Date.now() + 11 * DAY_MS,
-    claimUrl: "suisend.app/claim/0x4f2a...c91",
-  },
-  {
-    id: "demo2",
-    linkHash: "0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b",
-    sender: "0xabc...def",
-    amount: "25.50 SUI",
-    numericAmount: 25.5,
-    note: "Birthday gift 🎂",
-    status: "claimed",
-    yieldEarned: "0.0012483",
-    createdAt: Date.now() - 10 * DAY_MS,
-    expiresAt: Date.now() + 4 * DAY_MS,
-    claimUrl: "suisend.app/claim/0xa1b2...a1b",
-    claimedAt: Date.now() - 6 * DAY_MS,
-  },
-  {
-    id: "demo3",
-    linkHash: "0xdeadbeefcafe1234567890abcdef1234567890abcdef1234567890abcdef12345678",
-    sender: "0x789...ghi",
-    amount: "500.00 SUI",
-    numericAmount: 500,
-    note: "Consulting fees",
-    status: "refunded",
-    yieldEarned: "0.3245678",
-    createdAt: Date.now() - 20 * DAY_MS,
-    expiresAt: Date.now() - 6 * DAY_MS,
-    claimUrl: "suisend.app/claim/0xdead...5678",
-  },
-  {
-    id: "demo4",
-    linkHash: "0x1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff0001",
-    sender: "0xabc...def",
-    amount: "10.00 SUI",
-    numericAmount: 10,
-    note: "Coffee run ☕",
-    status: "pending",
-    yieldEarned: "0.0000192",
-    createdAt: Date.now() - 1 * DAY_MS,
-    expiresAt: Date.now() + 13 * DAY_MS,
-    claimUrl: "suisend.app/claim/0x1111...0001",
-  },
-];
-
-const claimStore: ClaimRecord[] = [
-  {
-    id: "c1",
-    linkHash: "0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b",
-    claimer: "0x456...jkl",
-    amount: "25.50 SUI",
-    yieldEarned: "0.0012483",
-    claimedAt: Date.now() - 6 * DAY_MS,
-  },
-];
-
-export function getDemoSender(): string {
-  return "0xabc...def";
-}
-
-export function getMyPayments(address: string): PaymentLink[] {
-  const userPayments = paymentStore.filter(
-    (p) => p.sender.toLowerCase() === address.toLowerCase(),
-  );
-  return userPayments;
-}
-
-export function getMyClaims(address: string): ClaimRecord[] {
-  return claimStore.filter(
-    (c) => c.claimer.toLowerCase() === address.toLowerCase(),
-  );
-}
-
-export function getAllPayments(): PaymentLink[] {
-  return [...paymentStore];
-}
-
-export function findPaymentByHash(hash: string): PaymentLink | undefined {
-  return paymentStore.find((p) => p.linkHash.includes(hash));
-}
-
-export function getPendingCount(): number {
-  return paymentStore.filter((p) => p.status === "pending").length;
-}
-
-export function getTotalYieldAccrued(): number {
-  return paymentStore.reduce((sum, p) => sum + parseFloat(p.yieldEarned || "0"), 0);
-}
-
-export function getTotalVolume(): number {
-  return paymentStore.reduce((sum, p) => sum + p.numericAmount, 0);
-}
-
-export function createPaymentLink(
-  sender: string,
-  amount: number,
-  note: string,
-): PaymentLink {
-  const hash = randomHash();
-  const shortHash = hash.substring(0, 10) + "..." + hash.substring(hash.length - 6);
-  const now = Date.now();
-  const link: PaymentLink = {
-    id: genId(),
-    linkHash: hash,
-    sender,
-    amount: `${formatSui(amount)} SUI`,
-    numericAmount: amount,
-    note,
-    status: "pending",
-    yieldEarned: "0",
-    createdAt: now,
-    expiresAt: now + EXPIRY_DAYS * DAY_MS,
-    claimUrl: `suisend.app/claim/${shortHash}`,
-  };
-  paymentStore.push(link);
-  return link;
-}
-
-export function claimPayment(
-  claimer: string,
-  hash: string,
-): { success: boolean; payment?: PaymentLink; error?: string } {
-  const payment = paymentStore.find(
-    (p) => p.linkHash.includes(hash) && p.status === "pending",
-  );
-  if (!payment) {
-    return { success: false, error: "Payment not found or already claimed" };
-  }
-  const elapsed = Date.now() - payment.createdAt;
-  const yieldVal = calcYield(payment.numericAmount, elapsed);
-  const yieldStr = formatYield(yieldVal);
-
-  payment.status = "claimed";
-  payment.yieldEarned = yieldStr;
-  payment.claimedAt = Date.now();
-  payment.amount = `${formatSui(payment.numericAmount + yieldVal)} SUI`;
-
-  claimStore.push({
-    id: genId(),
-    linkHash: payment.linkHash,
-    claimer,
-    amount: payment.amount,
-    yieldEarned: yieldStr,
-    claimedAt: Date.now(),
-  });
-
-  return { success: true, payment };
-}
-
-export function simulateYieldAccrual(amount: number, elapsedMs: number): number {
-  return calcYield(amount, elapsedMs);
 }

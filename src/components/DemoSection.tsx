@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { getAppUrl } from "@/lib/url";
 import Reveal from "./Reveal";
 
 const checkIcon = (
@@ -23,7 +24,7 @@ export default function DemoSection() {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText("https://suisend.app/claim/0x4f2a...8c91");
+      await navigator.clipboard.writeText(`${getAppUrl()}/claim/0x4f2a...8c91`);
     } catch {
       // fallback
     }
@@ -69,7 +70,7 @@ export default function DemoSection() {
             <div className="app-dot" />
             <div className="app-dot" />
             <div className="app-dot" />
-            <div className="app-url">suisend.app/send</div>
+            <div className="app-url">{getAppUrl()}/send</div>
           </div>
           <div className="app-body">
             <div className="app-tabs">
@@ -111,7 +112,7 @@ export default function DemoSection() {
               <div className="link-gen show" ref={linkRef}>
                 <div className="lg-label">Link generated ✓</div>
                 <div className="lg-url" onClick={handleCopy}>
-                  suisend.app/claim/0x4f2a...8c91
+                  {getAppUrl()}/claim/0x4f2a...8c91
                 </div>
                 {copied && <div className="lg-copied" style={{ display: "block" }}>Copied to clipboard ✓</div>}
               </div>

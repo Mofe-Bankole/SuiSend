@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
+import {
+  useCurrentAccount,
+  useSuiClient,
+  useSignAndExecuteTransaction,
+} from "@mysten/dapp-kit";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  findPaymentByHash,
-  claimPayment,
-  simulateYieldAccrual,
+  lookupPayment,
+  buildClaimPaymentScallopPTB,
 } from "@/lib/suisend";
 import { getScallopApy } from "@/lib/scallop";
 import { useNow, timeAgo, timeUntil } from "@/hooks/useNow";
@@ -15,33 +18,46 @@ import {
   getGoogleAuthUrl,
   getZkLoginState,
   clearZkLogin,
+  signWithZkLoginAndExecute,
 } from "@/lib/zklogin";
-import type { PaymentLink } from "@/lib/suisend";
+import type { TxPhase } from "./TxStatusOverlay";
 
-export default function ClaimTab() {
+export default function ClaimTab({
+  setTxPhase,
+}: {
+  setTxPhase: (p: TxPhase) => void;
+}) {
   const now = useNow();
   const suiClient = useSuiClient();
   const account = useCurrentAccount();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
 
   const [claimInput, setClaimInput] = useState("");
-  const [foundPayment, setFoundPayment] = useState<PaymentLink | null>(null);
+  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [claimResult, setClaimResult] = useState<
     "idle" | "success" | "error"
   >("idle");
   const [claimMsg, setClaimMsg] = useState("");
-  const [searched, setSearched] = useState(false);
   const [apy, setApy] = useState(8.2);
-  const [animatingYield, setAnimatingYield] = useState(0);
   const [zkLoggingIn, setZkLoggingIn] = useState(false);
 
+  const [paymentInfo, setPaymentInfo] = useState<{
+    linkHash: string;
+    amount: bigint;
+    expiry: bigint;
+    state: number;
+    sender: string;
+  } | null>(null);
+
   const zkState = getZkLoginState();
-  const canClaim = foundPayment && foundPayment.status === "pending" && (!!account || zkState?.isReady);
+  const canClaim = !!paymentInfo && paymentInfo.state === 0 && (!!account || zkState?.isReady);
 
   useEffect(() => {
     getScallopApy(suiClient).then(setApy).catch(() => {});
   }, [suiClient]);
 
-  const handleLookup = () => {
+  const handleLookup = async () => {
     const raw = claimInput.trim();
     if (!raw) return;
 
@@ -51,27 +67,37 @@ export default function ClaimTab() {
         hash = new URL(hash).pathname.replace("/claim/", "");
       } catch {}
     }
-    hash = hash.replace("suisend.app/claim/", "");
+    hash = hash.replace(/^https?:\/\/[^\/]+\/claim\//, "");
 
-    const payment = findPaymentByHash(hash);
-    setSearched(true);
+    setSearched(false);
+    setPaymentInfo(null);
+    setClaimResult("idle");
+    setClaimMsg("");
+    setLoading(true);
 
-    if (payment && payment.status === "pending") {
-      setFoundPayment(payment);
-      setClaimResult("idle");
-      setClaimMsg("");
-    } else if (payment && payment.status === "claimed") {
-      setFoundPayment(null);
+    try {
+      const result = await lookupPayment(suiClient, hash);
+      if (result.exists && result.amount !== undefined && result.expiry !== undefined && result.state !== undefined && result.sender) {
+        setPaymentInfo({
+          linkHash: hash,
+          amount: result.amount,
+          expiry: result.expiry,
+          state: result.state,
+          sender: result.sender,
+        });
+        setSearched(true);
+      } else {
+        setClaimResult("error");
+        setClaimMsg("No active payment found. Check the link and try again.");
+        setSearched(true);
+      }
+    } catch (e) {
+      console.error("lookupPayment error:", e);
       setClaimResult("error");
-      setClaimMsg("This payment has already been claimed.");
-    } else if (payment && payment.status === "refunded") {
-      setFoundPayment(null);
-      setClaimResult("error");
-      setClaimMsg("This payment has expired and been refunded.");
-    } else {
-      setFoundPayment(null);
-      setClaimResult("error");
-      setClaimMsg("No payment found. Check the link and try again.");
+      setClaimMsg("Failed to look up payment. Please try again.");
+      setSearched(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,45 +112,38 @@ export default function ClaimTab() {
     }
   };
 
-  const handleClaim = () => {
-    if (!foundPayment) return;
+  const handleClaim = async () => {
+    if (!paymentInfo) return;
 
-    if (account) {
-      const hashForClaim = foundPayment.linkHash.substring(0, 10);
-      const result = claimPayment(
-        account.address,
-        hashForClaim,
-      );
+    try {
+      const tx = buildClaimPaymentScallopPTB(paymentInfo.linkHash);
 
-      if (result.success && result.payment) {
+      if (account) {
+        setTxPhase({ status: "signing" });
+        const result = await signAndExecute({ transaction: tx });
+        setTxPhase({
+          status: "confirmed",
+          txId: result.digest,
+          label: "Payment claimed",
+        });
         setClaimResult("success");
-        setClaimMsg(
-          `Claimed ${result.payment.amount} including yield!`,
-        );
-        setFoundPayment(result.payment);
-      } else {
-        setClaimResult("error");
-        setClaimMsg(result.error || "Claim failed. Try again.");
-      }
-    } else if (zkState?.isReady) {
-      // TODO: Replace with real PTB once contract is deployed
-      // For now, use the same mock claim since we're pre-deployment
-      const hashForClaim = foundPayment.linkHash.substring(0, 10);
-      const result = claimPayment(
-        zkState.address,
-        hashForClaim,
-      );
-
-      if (result.success && result.payment) {
+        setClaimMsg(`Successfully claimed! View on SuiScan ↗`);
+        setPaymentInfo(null);
+      } else if (zkState?.isReady) {
+        setTxPhase({ status: "signing" });
+        const digest = await signWithZkLoginAndExecute(tx);
+        setTxPhase({
+          status: "confirmed",
+          txId: digest,
+          label: "Payment claimed",
+        });
         setClaimResult("success");
-        setClaimMsg(
-          `Claimed ${result.payment.amount} including yield! (via Google)`,
-        );
-        setFoundPayment(result.payment);
-      } else {
-        setClaimResult("error");
-        setClaimMsg(result.error || "Claim failed. Try again.");
+        setClaimMsg(`Successfully claimed! View on SuiScan ↗`);
+        setPaymentInfo(null);
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Claim failed";
+      setTxPhase({ status: "failed", error: msg });
     }
   };
 
@@ -133,50 +152,14 @@ export default function ClaimTab() {
   };
 
   const elapsed =
-    foundPayment && foundPayment.status === "pending"
-      ? now - foundPayment.createdAt
+    paymentInfo
+      ? now - (paymentInfo.expiry > 0 ? (Number(paymentInfo.expiry) - 86400000 * 14) : now)
       : 0;
-  const dueYield = foundPayment
-    ? simulateYieldAccrual(foundPayment.numericAmount, elapsed)
-    : 0;
-
-  useEffect(() => {
-    if (foundPayment && foundPayment.status === "pending" && dueYield > 0) {
-      const start = performance.now();
-      const duration = 500;
-      const target = dueYield;
-      let raf: number;
-      const tick = (t: number) => {
-        const pct = Math.min((t - start) / duration, 1);
-        const eased = 1 - Math.pow(1 - pct, 3);
-        setAnimatingYield(target * eased);
-        if (pct < 1) raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(raf);
-    }
-    setAnimatingYield(0);
-  }, [foundPayment?.status, dueYield, foundPayment?.linkHash]);
 
   const [walrusNote, setWalrusNote] = useState<string | null>(null);
-
   useEffect(() => {
-    if (foundPayment?.walrusBlobId) {
-      setWalrusNote(null);
-      readText(foundPayment.walrusBlobId, "testnet")
-        .then((text) => setWalrusNote(text))
-        .catch(() => setWalrusNote(null));
-    } else {
-      setWalrusNote(null);
-    }
-  }, [foundPayment?.walrusBlobId, foundPayment?.linkHash]);
-
-  const formatYield = useCallback((val: number) => {
-    if (val >= 1) return val.toFixed(4);
-    if (val >= 0.001) return val.toFixed(6);
-    if (val <= 0) return "0";
-    return val.toFixed(8);
-  }, []);
+    setWalrusNote(null);
+  }, [paymentInfo?.linkHash]);
 
   return (
     <div>
@@ -196,11 +179,12 @@ export default function ClaimTab() {
             onChange={(e) => {
               setClaimInput(e.target.value);
               setSearched(false);
+              setPaymentInfo(null);
               setClaimResult("idle");
               setClaimMsg("");
             }}
             onKeyDown={handleKeyDown}
-            placeholder="suisend.app/claim/0x... or paste hash"
+            placeholder="Paste payment link or hash here"
           />
           <div className="absolute left-[14px] top-1/2 -translate-y-1/2 text-text-muted text-[15px] pointer-events-none">
             🔗
@@ -211,13 +195,13 @@ export default function ClaimTab() {
       <button
         className="btn-gradient"
         onClick={handleLookup}
-        disabled={!claimInput.trim()}
+        disabled={!claimInput.trim() || loading}
       >
-        Find payment
+        {loading ? "Looking up..." : "Find payment"}
       </button>
 
       <AnimatePresence mode="wait">
-        {foundPayment && foundPayment.status === "pending" && (
+        {paymentInfo && paymentInfo.state === 0 && (
           <motion.div
             key="found"
             initial={{ opacity: 0, y: 16 }}
@@ -232,44 +216,21 @@ export default function ClaimTab() {
                     Payment found
                   </div>
                   <div className="font-display text-2xl font-bold tracking-tight">
-                    {foundPayment.amount}
+                    {`${(Number(paymentInfo.amount) / 1e9).toFixed(2)} SUI`}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] uppercase tracking-[0.08em] text-text-secondary">
-                    Yield accrued
+                    APY
                   </div>
                   <div className="font-display text-base font-semibold text-accent tabular-nums">
-                    +{formatYield(animatingYield)} SUI
+                    {apy.toFixed(2)}%
                   </div>
                 </div>
               </div>
 
-              {foundPayment.note && (
-                <div className="text-sm text-text-secondary mb-3 italic">
-                  &ldquo;{foundPayment.note}&rdquo;
-                </div>
-              )}
-              {walrusNote && (
-                <div className="glass-card p-2 mb-3">
-                  <div className="text-[10px] uppercase tracking-[0.06em] text-text-muted font-medium mb-0.5">
-                    Note (from Walrus)
-                  </div>
-                  <div className="text-sm text-text-secondary italic">
-                    &ldquo;{walrusNote}&rdquo;
-                  </div>
-                </div>
-              )}
-              {foundPayment.walrusBlobId && !walrusNote && (
-                <div className="text-[10px] text-text-muted mb-3">
-                  Fetching note from Walrus...
-                </div>
-              )}
-
               <div className="flex items-center gap-2 text-[11px] text-text-muted mb-4">
-                <span>Sent {timeAgo(foundPayment.createdAt, now)}</span>
-                <span className="w-1 h-1 rounded-full bg-border-light" />
-                <span>Expires in {timeUntil(foundPayment.expiresAt, now)}</span>
+                <span>Expires in {timeUntil(Number(paymentInfo.expiry), now)}</span>
               </div>
 
               {canClaim ? (
@@ -350,8 +311,7 @@ export default function ClaimTab() {
         )}
       </AnimatePresence>
 
-      {/* zkLogin section — shown when no wallet and no pending payment found */}
-      {!account && !foundPayment && (
+      {!account && !paymentInfo && (
         <div className="mt-8 pt-6 border-t border-border">
           <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted font-medium mb-3">
             No wallet? No problem

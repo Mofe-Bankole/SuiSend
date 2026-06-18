@@ -16,7 +16,7 @@ export interface WalrusEndpointConfig {
   aggregator: string;
 }
 
-export function getWalrusConfig(network: "testnet" | "mainnet" = "testnet"): WalrusEndpointConfig {
+export function getWalrusConfig(network: "testnet" | "mainnet" = "mainnet"): WalrusEndpointConfig {
   return {
     publisher: network === "testnet" ? TESTNET_PUBLISHER : MAINNET_PUBLISHER,
     aggregator: network === "testnet" ? TESTNET_AGGREGATOR : MAINNET_AGGREGATOR,
@@ -26,7 +26,7 @@ export function getWalrusConfig(network: "testnet" | "mainnet" = "testnet"): Wal
 export async function storeBlob(
   data: Uint8Array,
   epochs = 5,
-  network: "testnet" | "mainnet" = "testnet",
+  network: "testnet" | "mainnet" = "mainnet",
 ): Promise<WalrusStoreResult> {
   const { publisher } = getWalrusConfig(network);
   const url = `${publisher}/v1/blobs?epochs=${epochs}`;
@@ -49,7 +49,7 @@ export async function storeBlob(
 
 export async function readBlob(
   blobId: string,
-  network: "testnet" | "mainnet" = "testnet",
+  network: "testnet" | "mainnet" = "mainnet",
 ): Promise<Uint8Array> {
   const { aggregator } = getWalrusConfig(network);
   const url = `${aggregator}/v1/blobs/${blobId}`;

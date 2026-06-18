@@ -20,7 +20,7 @@ const networks = {
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <SuiClientProvider networks={networks} defaultNetwork="testnet">
+      <SuiClientProvider networks={networks} defaultNetwork="mainnet">
         <WalletProvider autoConnect>{children}</WalletProvider>
       </SuiClientProvider>
     </QueryClientProvider>

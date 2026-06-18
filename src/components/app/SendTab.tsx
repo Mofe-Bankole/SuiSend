@@ -1,16 +1,18 @@
 "use client";
-
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   useCurrentAccount,
   useSuiClient,
   useSuiClientQuery,
+  useSignAndExecuteTransaction,
 } from "@mysten/dapp-kit";
 import { motion, AnimatePresence } from "framer-motion";
-import { createPaymentLink } from "@/lib/suisend";
+import { buildCreatePaymentScallopPTB, randomHashHex } from "@/lib/suisend";
 import { getScallopApy } from "@/lib/scallop";
-import { mistToSui } from "@/lib/constants";
-import { storeText } from "@/lib/walrus";
+import { mistToSui, suiToMist } from "@/lib/constants";
+import { storeText, blobIdToHex } from "@/lib/walrus";
+import { getAppUrl } from "@/lib/url";
+import type { TxPhase } from "./TxStatusOverlay";
 
 const DAY_MS = 86400000;
 
@@ -18,11 +20,16 @@ function calcYield(amount: number, apyBps: number, elapsedMs: number): number {
   return (amount * apyBps * elapsedMs) / (365 * DAY_MS) / 10000;
 }
 
-const PRESETS = [10, 25, 50, 100, 500];
+const PRESETS = [10, 25, 35, 50, 100, 500];
 
-export default function SendTab() {
+export default function SendTab({
+  setTxPhase,
+}: {
+  setTxPhase: (p: TxPhase) => void;
+}) {
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
   const { data: balance } = useSuiClientQuery("getBalance", {
     owner: account?.address ?? "",
   });
@@ -36,6 +43,7 @@ export default function SendTab() {
   const [animatingYield, setAnimatingYield] = useState(0);
   const [walrusBlobId, setWalrusBlobId] = useState<string | null>(null);
   const [walrusUploading, setWalrusUploading] = useState(false);
+  const [sending, setSending] = useState(false);
   const linkRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,30 +103,62 @@ export default function SendTab() {
   };
 
   const handleSend = async () => {
-    if (!account || rawAmount <= 0) return;
+    if (!account || rawAmount <= 0 || sending) return;
 
-    let uploadResult: { blobId: string } | null = null;
-    if (note.trim()) {
-      setWalrusUploading(true);
-      try {
-        uploadResult = await storeText(note.trim(), 5, "testnet");
-        setWalrusBlobId(uploadResult.blobId);
-      } catch (e) {
-        console.warn("Walrus upload failed, continuing without blob:", e);
-      } finally {
-        setWalrusUploading(false);
+    setSending(true);
+
+    try {
+      let noteBlobIdHex: string | undefined;
+      if (note.trim()) {
+        setWalrusUploading(true);
+        try {
+          const result = await storeText(note.trim(), 5, "mainnet");
+          noteBlobIdHex = blobIdToHex(result.blobId);
+          setWalrusBlobId(result.blobId);
+        } catch (e) {
+          console.warn("Walrus upload failed, continuing without blob:", e);
+        } finally {
+          setWalrusUploading(false);
+        }
       }
-    }
 
-    const payment = createPaymentLink(account.address, rawAmount, note);
-    if (uploadResult) {
-      payment.walrusBlobId = uploadResult.blobId;
+      const linkHash = randomHashHex();
+      const amountMist = suiToMist(rawAmount);
+
+      const tx = buildCreatePaymentScallopPTB({
+        amount: amountMist,
+        linkHashHex: linkHash,
+        noteBlobIdHex,
+      });
+
+      setTxPhase({ status: "signing" });
+
+      const result = await signAndExecute({ transaction: tx });
+
+      setTxPhase({
+        status: "confirmed",
+        txId: result.digest,
+        label: "Payment created",
+      });
+
+      const shortHash =
+        linkHash.substring(0, 10) +
+        "..." +
+        linkHash.substring(linkHash.length - 6);
+      setGeneratedUrl(`${getAppUrl()}/claim/${shortHash}`);
+      setLinkShown(true);
+      setTimeout(() => {
+        linkRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }, 50);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Transaction failed";
+      setTxPhase({ status: "failed", error: msg });
+    } finally {
+      setSending(false);
     }
-    setGeneratedUrl(payment.claimUrl);
-    setLinkShown(true);
-    setTimeout(() => {
-      linkRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }, 50);
   };
 
   const handleCopy = async () => {
@@ -138,8 +178,8 @@ export default function SendTab() {
         <div className="empty-icon">→</div>
         <div className="empty-title">Connect your wallet</div>
         <div className="empty-desc">
-          Use the button in the top-right to connect. Your funds never leave your
-          wallet until you send.
+          Use the button in the top-right to connect. Your funds never leave
+          your wallet until you send.
         </div>
       </div>
     );
@@ -223,13 +263,7 @@ export default function SendTab() {
         <div className="ybp-row">
           <span className="ybp-label">Estimated yield in 7 days</span>
           <span className="ybp-value">
-            {rawAmount > 0 ? (
-              <>
-                +{formatYield(animatingYield)} SUI
-              </>
-            ) : (
-              "—"
-            )}
+            {rawAmount > 0 ? <>+{formatYield(animatingYield)} SUI</> : "—"}
           </span>
         </div>
         <div className="ybp-sub">
@@ -241,15 +275,17 @@ export default function SendTab() {
       <button
         className="btn-gradient"
         onClick={handleSend}
-        disabled={!canSend || walrusUploading}
+        disabled={!canSend || walrusUploading || sending}
       >
-        {walrusUploading
-          ? "Uploading note to Walrus..."
-          : rawAmount <= 0
-            ? "Enter an amount"
-            : !canSend
-              ? "Insufficient balance"
-              : "Generate payment link →"}
+        {sending
+          ? "Confirming..."
+          : walrusUploading
+            ? "Uploading note to Walrus..."
+            : rawAmount <= 0
+              ? "Enter an amount"
+              : !canSend
+                ? "Insufficient balance"
+                : "Generate payment link →"}
       </button>
 
       <AnimatePresence>
@@ -267,7 +303,11 @@ export default function SendTab() {
               <div className="lgp-title">Payment link ready</div>
             </div>
             <div className="lgp-url-wrap">
-              <div className="lgp-url" onClick={handleCopy} title="Click to copy">
+              <div
+                className="lgp-url"
+                onClick={handleCopy}
+                title="Click to copy"
+              >
                 {generatedUrl}
               </div>
               <button
@@ -276,11 +316,29 @@ export default function SendTab() {
                 aria-label="Copy link"
               >
                 {copied ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>

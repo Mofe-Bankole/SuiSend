@@ -22,7 +22,7 @@ export const REDIRECT_URI =
 
 export const PROVER_URL = "https://prover-dev.mystenlabs.com/v1";
 export const SALT_URL = "https://salt.api.mystenlabs.com/get_salt";
-export const NETWORK = "testnet";
+export const NETWORK = "mainnet";
 
 const SESSION_KEYS = {
   ephemeralKey: "zklogin.ephemeralKey",
@@ -54,10 +54,6 @@ export function initZkLogin(): string {
 
   const keypair = new Ed25519Keypair();
   const randomness = generateRandomness();
-
-  // We need to get current epoch first, then derive nonce
-  // This is async, but we store partial state and complete in callback
-  // Instead, return URL and let callback handle the rest
 
   // Store ephemeral key and randomness immediately
   sessionStorage.setItem(

@@ -3,12 +3,12 @@
 import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { ConnectButton, useCurrentAccount, useSuiClient, useSuiClientQuery } from "@mysten/dapp-kit";
-import { AnimatePresence, motion, LayoutGroup } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import SendTab from "@/components/app/SendTab";
 import ClaimTab from "@/components/app/ClaimTab";
 import HistoryTab from "@/components/app/HistoryTab";
 import TxStatusOverlay, { type TxPhase } from "@/components/app/TxStatusOverlay";
-import { mistToSui, shortenAddress } from "@/lib/constants";
+import { mistToSui } from "@/lib/constants";
 
 const tabs = [
   { key: "send", label: "Send", icon: "→" },
@@ -16,11 +16,13 @@ const tabs = [
   { key: "history", label: "History", icon: "◎" },
 ];
 
-const tabComponents: Record<string, React.ReactNode> = {
-  send: <SendTab key="send" />,
-  claim: <ClaimTab key="claim" />,
-  history: <HistoryTab key="history" />,
-};
+function tabComponents(setTxPhase: (p: TxPhase) => void): Record<string, React.ReactNode> {
+  return {
+    send: <SendTab key="send" setTxPhase={setTxPhase} />,
+    claim: <ClaimTab key="claim" setTxPhase={setTxPhase} />,
+    history: <HistoryTab key="history" />,
+  };
+}
 
 export default function AppPage() {
   const [activeTab, setActiveTab] = useState("send");
@@ -33,8 +35,8 @@ export default function AppPage() {
   });
 
   const activeComponent = useMemo(
-    () => tabComponents[activeTab],
-    [activeTab],
+    () => tabComponents(setTxPhase)[activeTab],
+    [activeTab, setTxPhase],
   );
 
   const handleCloseOverlay = useCallback(() => {

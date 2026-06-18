@@ -1,7 +1,7 @@
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
+import ActivityFeed from "@/components/ActivityFeed";
 import StatsStrip from "@/components/StatsStrip";
-import MarqueeSection from "@/components/MarqueeSection";
 import HowItWorks from "@/components/HowItWorks";
 import PersonasSection from "@/components/PersonasSection";
 import ComparisonSection from "@/components/ComparisonSection";
@@ -17,8 +17,8 @@ export default function Home() {
     <>
       <Navbar />
       <Hero />
+      <ActivityFeed />
       <StatsStrip />
-      <MarqueeSection />
       <HowItWorks />
       <PersonasSection />
       <ComparisonSection />

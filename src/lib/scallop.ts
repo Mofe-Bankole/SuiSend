@@ -34,8 +34,14 @@ export function resetScallopBuilder() {
   initPromise = null;
 }
 
-export async function getScallopApy(suiClient: SuiJsonRpcClient): Promise<number> {
+export async function getScallopApy(
+  suiClient: SuiJsonRpcClient,
+): Promise<number> {
   try {
+    if (!suiClient) {
+      console.error("SUICLIENT NOT SUPPLIED");
+      return 8.2;
+    }
     const builder = await getScallopBuilder(suiClient);
     const market = await builder.query.queryMarket();
     const suiPool = market.pools.sui;
@@ -67,7 +73,10 @@ export async function buildDepositPTB(
       "sui",
       true,
     );
-    return { tx: scallopTx.txBlock, sSUIArg: sSUIResult as TransactionObjectArgument | null };
+    return {
+      tx: scallopTx.txBlock,
+      sSUIArg: sSUIResult as TransactionObjectArgument | null,
+    };
   } catch (err) {
     console.error("depositQuick failed:", err);
     throw err;

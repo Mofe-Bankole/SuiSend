@@ -206,40 +206,6 @@ html {
 }
 
 /* ── ORB SCENE ─────────────────────────────── */
-.orb-glow {
-    position: absolute;
-    inset: -60px;
-    background: radial-gradient(
-        circle at 50% 50%,
-        rgba(158, 255, 91, 0.08) 0%,
-        transparent 65%
-    );
-    border-radius: 50%;
-    animation: glow-pulse 4s ease-in-out infinite;
-}
-.orb-ring {
-    position: absolute;
-    inset: 20px;
-    border: 1px solid rgba(158, 255, 91, 0.12);
-    border-radius: 50%;
-    animation: spin-slow 18s linear infinite;
-}
-.orb-ring-2 {
-    position: absolute;
-    inset: 60px;
-    border: 1px dashed rgba(255, 255, 255, 0.05);
-    border-radius: 50%;
-    animation: spin-slow 28s linear infinite reverse;
-}
-.orb-coin {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 240px;
-    height: 240px;
-    animation: float-coin 5s ease-in-out infinite;
-}
 .orb-card {
     position: absolute;
     background: var(--bg-card);
@@ -247,24 +213,6 @@ html {
     border-radius: 12px;
     padding: 14px 16px;
     animation: float-card 4s ease-in-out infinite;
-}
-.oc1 {
-    top: 30px;
-    right: -10px;
-    width: 160px;
-    animation-delay: 0s;
-}
-.oc2 {
-    bottom: 60px;
-    left: -20px;
-    width: 150px;
-    animation-delay: 1.5s;
-}
-.oc3 {
-    bottom: 10px;
-    right: 10px;
-    width: 130px;
-    animation-delay: 2.5s;
 }
 .oc-label {
     font-size: 10px;
@@ -1035,7 +983,9 @@ html {
     letter-spacing: -0.01em;
     background: linear-gradient(135deg, var(--accent), #6bff3c);
     color: #08080a;
-    transition: opacity 0.2s, transform 0.15s;
+    transition:
+        opacity 0.2s,
+        transform 0.15s;
 }
 .btn-gradient:hover:not(:disabled) {
     opacity: 0.9;
@@ -1110,7 +1060,8 @@ html {
     animation: tx-pulse 1.2s ease-in-out infinite;
 }
 @keyframes tx-pulse {
-    0%, 100% {
+    0%,
+    100% {
         opacity: 1;
         transform: scale(1);
     }
@@ -1343,7 +1294,11 @@ html {
 /* Enhanced yield box */
 .yield-box-premium {
     padding: 16px 18px;
-    background: linear-gradient(135deg, rgba(158, 255, 91, 0.06), rgba(158, 255, 91, 0.02));
+    background: linear-gradient(
+        135deg,
+        rgba(158, 255, 91, 0.06),
+        rgba(158, 255, 91, 0.02)
+    );
     border: 1px solid rgba(158, 255, 91, 0.15);
     border-radius: 12px;
     margin-bottom: 16px;
@@ -1354,7 +1309,11 @@ html {
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse at 30% 50%, rgba(158, 255, 91, 0.05), transparent 70%);
+    background: radial-gradient(
+        ellipse at 30% 50%,
+        rgba(158, 255, 91, 0.05),
+        transparent 70%
+    );
     pointer-events: none;
 }
 .ybp-row {
@@ -1454,7 +1413,9 @@ html {
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
-    transition: color 0.2s, background 0.2s;
+    transition:
+        color 0.2s,
+        background 0.2s;
 }
 .lgp-copy:hover {
     color: var(--accent);
@@ -1476,7 +1437,11 @@ html {
     padding: 20px;
     border-radius: 14px;
     border: 1px solid var(--accent-mid);
-    background: linear-gradient(135deg, rgba(158, 255, 91, 0.06), rgba(158, 255, 91, 0.02));
+    background: linear-gradient(
+        135deg,
+        rgba(158, 255, 91, 0.06),
+        rgba(158, 255, 91, 0.02)
+    );
     position: relative;
     overflow: hidden;
 }
@@ -1484,7 +1449,11 @@ html {
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse at 70% 30%, rgba(158, 255, 91, 0.04), transparent 60%);
+    background: radial-gradient(
+        ellipse at 70% 30%,
+        rgba(158, 255, 91, 0.04),
+        transparent 60%
+    );
     pointer-events: none;
 }
 .claim-card-content {
@@ -1501,7 +1470,9 @@ html {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    transition: border-color 0.2s, transform 0.15s;
+    transition:
+        border-color 0.2s,
+        transform 0.15s;
 }
 .history-card:hover {
     border-color: rgba(255, 255, 255, 0.08);
@@ -1574,12 +1545,6 @@ html {
         padding-left: 24px;
         padding-right: 24px;
     }
-    .hero-grid {
-        grid-template-columns: 1fr;
-    }
-    .hero-right {
-        display: none;
-    }
     .feature-grid {
         grid-template-columns: 1fr;
     }
@@ -1605,5 +1570,37 @@ html {
     .marquee-item {
         font-size: 11px;
         padding: 8px 13px;
+    }
+}
+
+/* Custom cursor */
+.custom-cursor {
+    position: fixed;
+    top: -12px;
+    left: -12px;
+    width: 24px;
+    height: 24px;
+    pointer-events: none;
+    z-index: 9999;
+    mix-blend-mode: difference;
+    transition: opacity 0.2s;
+    will-change: translate;
+}
+
+/* Show custom cursor only on desktop, hide native cursor */
+@media (hover: hover) and (pointer: fine) {
+    html,
+    body,
+    a,
+    button,
+    input,
+    textarea,
+    select,
+    [role="button"],
+    [tabindex]:not([tabindex="-1"]) {
+        cursor: none !important;
+    }
+    .custom-cursor {
+        display: block;
     }
 }
