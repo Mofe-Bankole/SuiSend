@@ -7,10 +7,7 @@ import {
   useSignAndExecuteTransaction,
 } from "@mysten/dapp-kit";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  lookupPayment,
-  buildClaimPaymentScallopPTB,
-} from "@/lib/suisend";
+import { lookupPayment, buildClaimPaymentScallopPTB } from "@/lib/suisend";
 import { getScallopApy } from "@/lib/scallop";
 import { useNow, timeAgo, timeUntil } from "@/hooks/useNow";
 import { readText } from "@/lib/walrus";
@@ -35,9 +32,9 @@ export default function ClaimTab({
   const [claimInput, setClaimInput] = useState("");
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [claimResult, setClaimResult] = useState<
-    "idle" | "success" | "error"
-  >("idle");
+  const [claimResult, setClaimResult] = useState<"idle" | "success" | "error">(
+    "idle",
+  );
   const [claimMsg, setClaimMsg] = useState("");
   const [apy, setApy] = useState(8.2);
   const [zkLoggingIn, setZkLoggingIn] = useState(false);
@@ -51,10 +48,13 @@ export default function ClaimTab({
   } | null>(null);
 
   const zkState = getZkLoginState();
-  const canClaim = !!paymentInfo && paymentInfo.state === 0 && (!!account || zkState?.isReady);
+  const canClaim =
+    !!paymentInfo && paymentInfo.state === 0 && (!!account || zkState?.isReady);
 
   useEffect(() => {
-    getScallopApy(suiClient).then(setApy).catch(() => {});
+    getScallopApy(suiClient)
+      .then(setApy)
+      .catch(() => {});
   }, [suiClient]);
 
   const handleLookup = async () => {
@@ -77,7 +77,13 @@ export default function ClaimTab({
 
     try {
       const result = await lookupPayment(suiClient, hash);
-      if (result.exists && result.amount !== undefined && result.expiry !== undefined && result.state !== undefined && result.sender) {
+      if (
+        result.exists &&
+        result.amount !== undefined &&
+        result.expiry !== undefined &&
+        result.state !== undefined &&
+        result.sender
+      ) {
         setPaymentInfo({
           linkHash: hash,
           amount: result.amount,
@@ -151,10 +157,12 @@ export default function ClaimTab({
     if (e.key === "Enter") handleLookup();
   };
 
-  const elapsed =
-    paymentInfo
-      ? now - (paymentInfo.expiry > 0 ? (Number(paymentInfo.expiry) - 86400000 * 14) : now)
-      : 0;
+  const elapsed = paymentInfo
+    ? now -
+      (paymentInfo.expiry > 0
+        ? Number(paymentInfo.expiry) - 86400000 * 14
+        : now)
+    : 0;
 
   const [walrusNote, setWalrusNote] = useState<string | null>(null);
   useEffect(() => {
@@ -230,7 +238,9 @@ export default function ClaimTab({
               </div>
 
               <div className="flex items-center gap-2 text-[11px] text-text-muted mb-4">
-                <span>Expires in {timeUntil(Number(paymentInfo.expiry), now)}</span>
+                <span>
+                  Expires in {timeUntil(Number(paymentInfo.expiry), now)}
+                </span>
               </div>
 
               {canClaim ? (
@@ -242,7 +252,8 @@ export default function ClaimTab({
                     color: "var(--bg)",
                   }}
                 >
-                  Claim now{zkState?.isReady && !account ? " (via Google)" : ""} →
+                  Claim now{zkState?.isReady && !account ? " (via Google)" : ""}{" "}
+                  →
                 </button>
               ) : (
                 <div className="space-y-3">
@@ -251,7 +262,9 @@ export default function ClaimTab({
                     onClick={handleGoogleSignIn}
                     disabled={zkLoggingIn}
                   >
-                    {zkLoggingIn ? "Connecting..." : "Sign in with Google to claim →"}
+                    {zkLoggingIn
+                      ? "Connecting..."
+                      : "Sign in with Google to claim →"}
                   </button>
                   <p className="text-[11px] text-text-muted text-center">
                     or connect a wallet above
@@ -328,7 +341,9 @@ export default function ClaimTab({
                   G
                 </div>
                 <div>
-                  <div className="text-[12px] font-medium">Signed in with Google</div>
+                  <div className="text-[12px] font-medium">
+                    Signed in with Google
+                  </div>
                   <div className="text-[10px] font-mono text-text-muted">
                     {zkState.address.slice(0, 6)}...{zkState.address.slice(-4)}
                   </div>
@@ -336,7 +351,10 @@ export default function ClaimTab({
               </div>
               <button
                 className="text-[11px] text-text-muted hover:text-accent transition-colors"
-                onClick={() => { clearZkLogin(); window.location.reload(); }}
+                onClick={() => {
+                  clearZkLogin();
+                  window.location.reload();
+                }}
               >
                 Sign out
               </button>
@@ -352,11 +370,23 @@ export default function ClaimTab({
               ) : (
                 <>
                   <svg width="18" height="18" viewBox="0 0 48 48">
-                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                    <path fill="#FBBC05" d="M10.54 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.87 7.35 2.56 10.55l7.98-5.96z"/>
-                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.96C6.51 42.62 14.62 48 24 48z"/>
-                    <path fill="none" d="M0 0h48v48H0z"/>
+                    <path
+                      fill="#EA4335"
+                      d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                    />
+                    <path
+                      fill="#4285F4"
+                      d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M10.54 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.87 7.35 2.56 10.55l7.98-5.96z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.96C6.51 42.62 14.62 48 24 48z"
+                    />
+                    <path fill="none" d="M0 0h48v48H0z" />
                   </svg>
                   Sign in with Google
                 </>

@@ -141,11 +141,7 @@ export default function SendTab({
         label: "Payment created",
       });
 
-      const shortHash =
-        linkHash.substring(0, 10) +
-        "..." +
-        linkHash.substring(linkHash.length - 6);
-      setGeneratedUrl(`${getAppUrl()}/claim/${shortHash}`);
+      setGeneratedUrl(`${getAppUrl()}/claim/${linkHash}`);
       setLinkShown(true);
       setTimeout(() => {
         linkRef.current?.scrollIntoView({
@@ -163,11 +159,17 @@ export default function SendTab({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(`https://${generatedUrl}`);
+      await navigator.clipboard.writeText(generatedUrl);
     } catch {}
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const displayUrl = generatedUrl
+    ? generatedUrl.length > 60
+      ? generatedUrl.substring(0, 45) + "..." + generatedUrl.slice(-16)
+      : generatedUrl
+    : "";
 
   const suiBalance = balance ? mistToSui(BigInt(balance.totalBalance)) : 0;
   const canSend = rawAmount > 0 && rawAmount <= suiBalance;
@@ -308,7 +310,7 @@ export default function SendTab({
                 onClick={handleCopy}
                 title="Click to copy"
               >
-                {generatedUrl}
+                {displayUrl}
               </div>
               <button
                 className={`lgp-copy ${copied ? "copied" : ""}`}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Transaction } from "@mysten/sui/transactions";
-import { fromHex, toHex } from "@mysten/sui/utils";
+import { fromHex, toHex, normalizeSuiAddress } from "@mysten/sui/utils";
 import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import {
   SUISEND_PACKAGE_ID,
@@ -196,17 +196,19 @@ export async function queryUserSentPayments(
   return eventResult.data
     .filter((e) => {
       const parsed = e.parsedJson as Record<string, unknown> | null;
-      return parsed?.sender === address;
+      if (!parsed?.sender) return false;
+      return normalizeSuiAddress(parsed.sender as string) === normalizeSuiAddress(address);
     })
     .map((e) => {
       const parsed = e.parsedJson as Record<string, unknown>;
       const amount = Number(parsed.amount ?? 0);
       const createdAt = Number(parsed.created_at ?? 0);
       const expiry = Number(parsed.expiry ?? 0);
-      const linkHash = parsed.link_hash as string;
-      const shortHash = linkHash
-        ? linkHash.substring(0, 10) + "..." + linkHash.substring(linkHash.length - 6)
-        : "";
+
+      const rawLinkHash = parsed.link_hash;
+      const linkHash = Array.isArray(rawLinkHash)
+        ? "0x" + toHex(new Uint8Array(rawLinkHash as number[]))
+        : (rawLinkHash as string) || "";
 
       return {
         id: e.id.txDigest,
@@ -219,7 +221,7 @@ export async function queryUserSentPayments(
         yieldEarned: "0",
         createdAt,
         expiresAt: expiry,
-        claimUrl: `${getAppUrl()}/claim/${shortHash}`,
+        claimUrl: `${getAppUrl()}/claim/${linkHash}`,
       };
     });
 }
@@ -244,9 +246,13 @@ export async function queryUserClaimReceipts(
     const content = receipt.data?.content;
     if (content?.dataType !== "moveObject") continue;
     const fields = content.fields as Record<string, unknown>;
+    const rawLinkHash = fields.payment_link_hash;
+    const linkHash = Array.isArray(rawLinkHash)
+      ? "0x" + toHex(new Uint8Array(rawLinkHash as number[]))
+      : (rawLinkHash as string) || "";
     claims.push({
       id: obj.data.objectId,
-      linkHash: (fields.payment_link_hash as string) ?? "",
+      linkHash,
       claimer: (fields.recipient as string) ?? "",
       amount: formatSui(Number(fields.total_claimed ?? 0)),
       yieldEarned: formatSui(Number(fields.yield_earned ?? 0)),

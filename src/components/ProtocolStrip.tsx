@@ -1,9 +1,10 @@
 const protocols = [
   "Sui Network",
   "Scallop Protocol",
-  "Next.js 15",
+  "Next.js",
   "Fastify",
   "@mysten/dapp-kit",
+  "Walrus",
 ];
 
 export default function ProtocolStrip() {
