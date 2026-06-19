@@ -1,16 +1,34 @@
 import { useSyncExternalStore } from "react";
 
-function subscribe(cb: () => void) {
-  const id = setInterval(cb, 30000);
-  return () => clearInterval(id);
-}
-
 function getNow() {
   return Date.now();
 }
 
+const store = {
+  now: getNow(),
+  listeners: new Set<() => void>(),
+};
+
+function subscribe(cb: () => void) {
+  store.listeners.add(cb);
+  return () => {
+    store.listeners.delete(cb);
+  };
+}
+
+function getSnapshot() {
+  return store.now;
+}
+
+function tick() {
+  store.now = Date.now();
+  store.listeners.forEach((cb) => cb());
+}
+
+setInterval(tick, 30000);
+
 export function useNow(): number {
-  return useSyncExternalStore(subscribe, getNow, getNow);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 export function msToDays(ms: number): number {

@@ -30,9 +30,11 @@ export default function AppPage() {
 
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
-  const { data: balance } = useSuiClientQuery("getBalance", {
-    owner: account?.address ?? "",
-  });
+  const balanceParams = useMemo(
+    () => ({ owner: account?.address ?? "" }),
+    [account?.address],
+  );
+  const { data: balance } = useSuiClientQuery("getBalance", balanceParams);
 
   const activeComponent = useMemo(
     () => tabComponents(setTxPhase)[activeTab],

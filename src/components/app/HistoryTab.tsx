@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { motion, AnimatePresence } from "framer-motion";
 import { queryUserSentPayments, queryUserClaimReceipts } from "@/lib/suisend";
@@ -43,6 +43,8 @@ const itemVariants = {
 export default function HistoryTab() {
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
+  const suiClientRef = useRef(suiClient);
+  suiClientRef.current = suiClient;
   const now = useNow();
   const [filter, setFilter] = useState("all");
   const [sentPayments, setSentPayments] = useState<PaymentLink[]>([]);
@@ -55,8 +57,8 @@ export default function HistoryTab() {
     setLoading(true);
 
     Promise.all([
-      queryUserSentPayments(suiClient, account.address),
-      queryUserClaimReceipts(suiClient, account.address),
+      queryUserSentPayments(suiClientRef.current, account.address),
+      queryUserClaimReceipts(suiClientRef.current, account.address),
     ])
       .then(([sent, claims]) => {
         if (!cancelled) {
@@ -70,7 +72,7 @@ export default function HistoryTab() {
       });
 
     return () => { cancelled = true; };
-  }, [suiClient, account?.address]);
+  }, [account?.address]);
 
   const allItems = [
     ...sentPayments.map((p) => ({ type: "sent" as const, data: p })),
