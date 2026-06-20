@@ -6,6 +6,7 @@ import {
   getZkLoginState,
   clearZkLogin,
   getGoogleAuthUrl,
+  type ZkLoginState,
 } from "@/lib/zklogin";
 import { shortenAddress } from "@/lib/constants";
 
@@ -22,7 +23,7 @@ export default function ConnectModal({
 }: ConnectModalProps) {
   const account = useCurrentAccount();
   const { mutate: disconnectWallet } = useDisconnectWallet();
-  const [zkState, setZkState] = useState(getZkLoginState());
+  const [zkState, setZkState] = useState<ZkLoginState | null>(null);
   const [connectingGoogle, setConnectingGoogle] = useState(false);
 
   useEffect(() => {
