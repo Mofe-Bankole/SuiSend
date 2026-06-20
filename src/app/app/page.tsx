@@ -2,7 +2,15 @@
 
 import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { ConnectButton, useCurrentAccount, useSuiClient, useSuiClientQuery } from "@mysten/dapp-kit";
+import {
+  useCurrentAccount,
+  useSuiClient,
+  useSuiClientQuery,
+  ConnectModal as WalletConnectModal,
+} from "@mysten/dapp-kit";
+import ConnectModal from "@/components/app/ConnectModal";
+import { getZkLoginState } from "@/lib/zklogin";
+import { shortenAddress } from "@/lib/constants";
 import { AnimatePresence, motion } from "framer-motion";
 import SendTab from "@/components/app/SendTab";
 import ClaimTab from "@/components/app/ClaimTab";
@@ -30,6 +38,15 @@ export default function AppPage() {
 
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const zkState = getZkLoginState();
+  const isConnected = !!(account || zkState?.isReady);
+  const connectedLabel = account
+    ? shortenAddress(account.address)
+    : zkState?.isReady
+      ? shortenAddress(zkState.address)
+      : null;
   const balanceParams = useMemo(
     () => ({ owner: account?.address ?? "" }),
     [account?.address],
@@ -83,9 +100,25 @@ export default function AppPage() {
               {displayBalance}
             </div>
           )}
-          <ConnectButton connectText="Connect" />
+          <button
+            className="px-4 py-1.5 rounded-lg text-[13px] font-medium font-display bg-bg-card border border-border-light text-text-primary hover:border-text-muted transition-all cursor-pointer"
+            onClick={() => setShowConnectModal(true)}
+          >
+            {connectedLabel || "Connect"}
+          </button>
         </div>
       </header>
+
+      <ConnectModal
+        open={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+        onConnectWallet={() => setShowWalletModal(true)}
+      />
+      <WalletConnectModal
+        trigger={<span />}
+        open={showWalletModal}
+        onOpenChange={setShowWalletModal}
+      />
 
       <main className="flex-1 mx-auto w-full max-w-[560px] px-4 md:px-6 py-6 md:py-10 app-main">
         <AnimatePresence mode="wait">

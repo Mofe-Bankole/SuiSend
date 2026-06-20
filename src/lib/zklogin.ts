@@ -20,8 +20,7 @@ export const REDIRECT_URI =
     ? `${window.location.origin}/auth/callback`
     : "http://localhost:3000/auth/callback";
 
-export const PROVER_URL = "https://prover-dev.mystenlabs.com/v1";
-export const SALT_URL = "https://salt.api.mystenlabs.com/get_salt";
+export const ZKLOGIN_API = "/api/zklogin";
 export const NETWORK = "mainnet";
 
 const SESSION_KEYS = {
@@ -56,10 +55,7 @@ export function initZkLogin(): string {
   const randomness = generateRandomness();
 
   // Store ephemeral key and randomness immediately
-  sessionStorage.setItem(
-    SESSION_KEYS.ephemeralKey,
-    JSON.stringify(Array.from(keypair.getSecretKey())),
-  );
+  sessionStorage.setItem(SESSION_KEYS.ephemeralKey, keypair.getSecretKey());
   sessionStorage.setItem(SESSION_KEYS.randomness, randomness);
 
   // Return the Google OAuth URL (nonce will be generated when we know the epoch)
@@ -73,11 +69,21 @@ export async function getGoogleAuthUrl(): Promise<string> {
   const currentEpoch = Number(epoch);
   const maxEpoch = currentEpoch + 2;
 
-  // Recover ephemeral key from session
-  const keyData = sessionStorage.getItem(SESSION_KEYS.ephemeralKey);
-  if (!keyData) throw new Error("No ephemeral key found. Call initZkLogin first.");
-  const secretKey = new Uint8Array(JSON.parse(keyData));
-  const keypair = Ed25519Keypair.fromSecretKey(secretKey);
+  // Generate ephemeral key if not already in session
+  let keyStr = sessionStorage.getItem(SESSION_KEYS.ephemeralKey);
+  // Clear old format (was JSON.stringify(Array.from(...)) — starts with [)
+  if (keyStr && keyStr.startsWith("[")) {
+    Object.values(SESSION_KEYS).forEach((k) => sessionStorage.removeItem(k));
+    keyStr = null;
+  }
+  if (!keyStr) {
+    const kp = new Ed25519Keypair();
+    const randomness = generateRandomness();
+    sessionStorage.setItem(SESSION_KEYS.ephemeralKey, kp.getSecretKey());
+    sessionStorage.setItem(SESSION_KEYS.randomness, randomness);
+    keyStr = sessionStorage.getItem(SESSION_KEYS.ephemeralKey)!;
+  }
+  const keypair = Ed25519Keypair.fromSecretKey(keyStr);
 
   const randomness = sessionStorage.getItem(SESSION_KEYS.randomness)!;
   const nonce = generateNonce(keypair.getPublicKey(), maxEpoch, randomness);
@@ -106,7 +112,11 @@ export async function completeZkLogin(jwt: string): Promise<ZkLoginState> {
   }
 
   // Fetch salt
-  const saltResp = await fetch(`${SALT_URL}?jwt=${encodeURIComponent(jwt)}`);
+  const saltResp = await fetch(ZKLOGIN_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "salt", jwt }),
+  });
   if (!saltResp.ok) {
     throw new Error(`Salt service failed: ${saltResp.status}`);
   }
@@ -117,28 +127,30 @@ export async function completeZkLogin(jwt: string): Promise<ZkLoginState> {
   const userAddress = jwtToAddress(jwt, userSalt, false);
 
   // Recover session state
-  const keyData = sessionStorage.getItem(SESSION_KEYS.ephemeralKey);
+  const keyStr = sessionStorage.getItem(SESSION_KEYS.ephemeralKey);
   const maxEpochStr = sessionStorage.getItem(SESSION_KEYS.maxEpoch);
   const randomness = sessionStorage.getItem(SESSION_KEYS.randomness);
-  if (!keyData || !maxEpochStr || !randomness) {
+  if (!keyStr || !maxEpochStr || !randomness) {
     throw new Error("Missing zkLogin session state. Please re-authenticate.");
   }
   const maxEpoch = Number(maxEpochStr);
-  const secretKey = new Uint8Array(JSON.parse(keyData));
-  const keypair = Ed25519Keypair.fromSecretKey(secretKey);
+  const keypair = Ed25519Keypair.fromSecretKey(keyStr);
   const extendedPubKey = getExtendedEphemeralPublicKey(keypair.getPublicKey());
 
   // Fetch ZK proof
-  const proverResp = await fetch(PROVER_URL, {
+  const proverResp = await fetch(ZKLOGIN_API, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      jwt,
-      extendedEphemeralPublicKey: extendedPubKey,
-      maxEpoch,
-      jwtRandomness: randomness,
-      salt: userSalt.toString(),
-      keyClaimName: "sub",
+      action: "prove",
+      proverPayload: {
+        jwt,
+        extendedEphemeralPublicKey: extendedPubKey,
+        maxEpoch,
+        jwtRandomness: randomness,
+        salt: userSalt.toString(),
+        keyClaimName: "sub",
+      },
     }),
   });
 
@@ -190,17 +202,16 @@ export async function signWithZkLoginAndExecute(
   const address = sessionStorage.getItem(SESSION_KEYS.address);
   const jwt = sessionStorage.getItem(SESSION_KEYS.jwt);
   const maxEpochStr = sessionStorage.getItem(SESSION_KEYS.maxEpoch);
-  const keyData = sessionStorage.getItem(SESSION_KEYS.ephemeralKey);
+  const keyStr = sessionStorage.getItem(SESSION_KEYS.ephemeralKey);
   const proofData = sessionStorage.getItem(SESSION_KEYS.proof);
   const saltStr = sessionStorage.getItem(SESSION_KEYS.salt);
 
-  if (!address || !jwt || !maxEpochStr || !keyData || !proofData || !saltStr) {
+  if (!address || !jwt || !maxEpochStr || !keyStr || !proofData || !saltStr) {
     throw new Error("Incomplete zkLogin session. Please re-authenticate.");
   }
 
   const maxEpoch = Number(maxEpochStr);
-  const secretKey = new Uint8Array(JSON.parse(keyData));
-  const keypair = Ed25519Keypair.fromSecretKey(secretKey);
+  const keypair = Ed25519Keypair.fromSecretKey(keyStr);
   const userSalt = BigInt(saltStr);
   const zkProof = JSON.parse(proofData);
   const decodedJwt = decodeJwt(jwt);

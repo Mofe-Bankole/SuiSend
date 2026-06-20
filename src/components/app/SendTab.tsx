@@ -9,9 +9,10 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { buildCreatePaymentScallopPTB, randomHashHex } from "@/lib/suisend";
 import { getScallopApy } from "@/lib/scallop";
-import { mistToSui, suiToMist } from "@/lib/constants";
+import { mistToSui, suiToMist, shortenAddress } from "@/lib/constants";
 import { storeText, blobIdToHex } from "@/lib/walrus";
 import { getAppUrl } from "@/lib/url";
+import { getZkLoginState, signWithZkLoginAndExecute } from "@/lib/zklogin";
 import type { TxPhase } from "./TxStatusOverlay";
 
 const DAY_MS = 86400000;
@@ -44,7 +45,21 @@ export default function SendTab({
   const [walrusBlobId, setWalrusBlobId] = useState<string | null>(null);
   const [walrusUploading, setWalrusUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [zkBalance, setZkBalance] = useState<number | null>(null);
   const linkRef = useRef<HTMLDivElement>(null);
+
+  const zkState = getZkLoginState();
+
+  useEffect(() => {
+    if (zkState?.isReady && !account) {
+      suiClient
+        .getBalance({ owner: zkState.address })
+        .then((b) => setZkBalance(mistToSui(BigInt(b.totalBalance))))
+        .catch(() => setZkBalance(0));
+    } else {
+      setZkBalance(null);
+    }
+  }, [zkState?.isReady, zkState?.address, account, suiClient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +118,8 @@ export default function SendTab({
   };
 
   const handleSend = async () => {
-    if (!account || rawAmount <= 0 || sending) return;
+    if (rawAmount <= 0 || sending) return;
+    if (!account && !zkState?.isReady) return;
 
     setSending(true);
 
@@ -133,11 +149,17 @@ export default function SendTab({
 
       setTxPhase({ status: "signing" });
 
-      const result = await signAndExecute({ transaction: tx });
+      let digest: string;
+      if (account) {
+        const result = await signAndExecute({ transaction: tx });
+        digest = result.digest;
+      } else {
+        digest = await signWithZkLoginAndExecute(tx);
+      }
 
       setTxPhase({
         status: "confirmed",
-        txId: result.digest,
+        txId: digest,
         label: "Payment created",
       });
 
@@ -171,17 +193,26 @@ export default function SendTab({
       : generatedUrl
     : "";
 
-  const suiBalance = balance ? mistToSui(BigInt(balance.totalBalance)) : 0;
-  const canSend = rawAmount > 0 && rawAmount <= suiBalance;
+  const suiBalance = balance ? mistToSui(BigInt(balance.totalBalance)) : (zkBalance ?? 0);
+  const activeBalance = account ? (balance ? mistToSui(BigInt(balance.totalBalance)) : 0) : (zkBalance ?? 0);
+  const canSend = rawAmount > 0 && rawAmount <= activeBalance;
 
-  if (!account) {
+  if (!account && !zkState?.isReady) {
     return (
-      <div className="empty-state">
-        <div className="empty-icon">→</div>
-        <div className="empty-title">Connect your wallet</div>
-        <div className="empty-desc">
-          Use the button in the top-right to connect. Your funds never leave
-          your wallet until you send.
+      <div>
+        <h2 className="font-display text-xl font-bold tracking-tight mb-1">
+          Send money
+        </h2>
+        <p className="text-text-secondary text-[13px] mb-5">
+          Create a payment link that earns yield
+        </p>
+        <div className="empty-state">
+          <div className="empty-icon">→</div>
+          <div className="empty-title">Connect to send</div>
+          <div className="empty-desc">
+            Connect a wallet or sign in with Google using the button above to
+            create a payment link.
+          </div>
         </div>
       </div>
     );
@@ -203,7 +234,7 @@ export default function SendTab({
             Balance
           </div>
           <div className="font-display text-[15px] font-semibold tabular-nums">
-            {suiBalance.toLocaleString(undefined, {
+            {activeBalance.toLocaleString(undefined, {
               minimumFractionDigits: 2,
               maximumFractionDigits: 4,
             })}{" "}
