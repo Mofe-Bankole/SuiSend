@@ -182,6 +182,50 @@ export async function lookupPayment(
   }
 }
 
+async function batchCheckPaymentStates(
+  suiClient: SuiJsonRpcClient,
+  linkHashes: string[],
+): Promise<Map<string, { state: number; exists: boolean }>> {
+  if (linkHashes.length === 0) return new Map();
+
+  const dummySender = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const map = new Map<string, { state: number; exists: boolean }>();
+
+  const tx = new Transaction();
+  for (const hash of linkHashes) {
+    const bytes = fromHex(hash.replace("0x", ""));
+    tx.moveCall({
+      target: `${SUISEND_PACKAGE_ID}::core::payment_exists`,
+      arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(bytes))],
+    });
+    tx.moveCall({
+      target: `${SUISEND_PACKAGE_ID}::core::payment_state`,
+      arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(bytes))],
+    });
+  }
+
+  try {
+    const result = await suiClient.devInspectTransactionBlock({
+      transactionBlock: tx,
+      sender: dummySender,
+    });
+
+    if (!result.results) return map;
+
+    for (let i = 0; i < linkHashes.length; i++) {
+      const existsBytes = result.results[i * 2]?.returnValues?.[0]?.[0];
+      const stateBytes = result.results[i * 2 + 1]?.returnValues?.[0]?.[0];
+      const exists = existsBytes ? decodeBool(new Uint8Array(existsBytes)) : false;
+      const state = stateBytes ? decodeU8(new Uint8Array(stateBytes)) : 0;
+      map.set(linkHashes[i], { state, exists });
+    }
+  } catch (e) {
+    console.warn("batchCheckPaymentStates error:", e);
+  }
+
+  return map;
+}
+
 export async function queryUserSentPayments(
   suiClient: SuiJsonRpcClient,
   address: string,
@@ -193,7 +237,7 @@ export async function queryUserSentPayments(
     limit: 50,
   });
 
-  return eventResult.data
+  const rawPayments = eventResult.data
     .filter((e) => {
       const parsed = e.parsedJson as Record<string, unknown> | null;
       if (!parsed?.sender) return false;
@@ -201,29 +245,76 @@ export async function queryUserSentPayments(
     })
     .map((e) => {
       const parsed = e.parsedJson as Record<string, unknown>;
-      const amount = Number(parsed.amount ?? 0);
-      const createdAt = Number(parsed.created_at ?? 0);
-      const expiry = Number(parsed.expiry ?? 0);
-
       const rawLinkHash = parsed.link_hash;
       const linkHash = Array.isArray(rawLinkHash)
         ? "0x" + toHex(new Uint8Array(rawLinkHash as number[]))
         : (rawLinkHash as string) || "";
-
-      return {
-        id: e.id.txDigest,
-        linkHash,
-        sender: (parsed.sender as string) ?? "",
-        amount: formatSui(amount),
-        numericAmount: amount / 1e9,
-        note: "",
-        status: "pending" as PaymentStatus,
-        yieldEarned: "0",
-        createdAt,
-        expiresAt: expiry,
-        claimUrl: `${getAppUrl()}/claim/${linkHash}`,
-      };
+      return { event: e, parsed, linkHash };
     });
+
+  const claimedAtMap = new Map<string, number>();
+
+  try {
+    const claimedEvents = await suiClient.queryEvents({
+      query: {
+        MoveEventType: `${SUISEND_PACKAGE_ID}::core::PaymentClaimedEvent`,
+      },
+      limit: 50,
+    });
+    for (const ev of claimedEvents.data) {
+      const p = ev.parsedJson as Record<string, unknown> | null;
+      if (!p) continue;
+      const rawHash = p.link_hash;
+      const evHash = Array.isArray(rawHash)
+        ? "0x" + toHex(new Uint8Array(rawHash as number[]))
+        : (rawHash as string) || "";
+      const claimedTs = Number(p.claimed_at ?? 0);
+      if (evHash && claimedTs) claimedAtMap.set(evHash, claimedTs);
+    }
+  } catch (e) {
+    console.warn("query sent: failed to fetch claimed events", e);
+  }
+
+  const stateMap = await batchCheckPaymentStates(
+    suiClient,
+    rawPayments.map((p) => p.linkHash),
+  );
+
+  const PAYMENT_STATE: Record<number, PaymentStatus> = {
+    0: "pending",
+    1: "claimed",
+    2: "refunded",
+    3: "expired",
+  };
+
+  return rawPayments.map(({ event: e, parsed, linkHash }) => {
+    const amount = Number(parsed.amount ?? 0);
+    const createdAt = Number(parsed.created_at ?? 0);
+    const expiry = Number(parsed.expiry ?? 0);
+
+    const checked = stateMap.get(linkHash);
+    let status: PaymentStatus;
+    if (!checked || !checked.exists) {
+      status = "claimed";
+    } else {
+      status = PAYMENT_STATE[checked.state] ?? "pending";
+    }
+
+    return {
+      id: e.id.txDigest,
+      linkHash,
+      sender: (parsed.sender as string) ?? "",
+      amount: formatSui(amount),
+      numericAmount: amount / 1e9,
+      note: "",
+      status,
+      yieldEarned: "0",
+      createdAt,
+      expiresAt: expiry,
+      claimUrl: `${getAppUrl()}/claim/${linkHash}`,
+      claimedAt: claimedAtMap.get(linkHash) || undefined,
+    };
+  });
 }
 
 export async function queryUserClaimReceipts(

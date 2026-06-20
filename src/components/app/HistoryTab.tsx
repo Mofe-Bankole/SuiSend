@@ -50,6 +50,15 @@ export default function HistoryTab() {
   const [sentPayments, setSentPayments] = useState<PaymentLink[]>([]);
   const [claimReceipts, setClaimReceipts] = useState<ClaimRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopyLink = async (id: string, url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {}
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   useEffect(() => {
     if (!account) return;
@@ -173,47 +182,104 @@ export default function HistoryTab() {
             {filteredItems.map((item) => (
               <motion.div key={item.type + item.data.id} variants={itemVariants}>
                 <div className="history-card">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
+                  <div className="history-card-top">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-display font-semibold text-[16px] tracking-tight">
+                          {item.data.amount}
+                        </span>
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[rgba(158,255,91,0.12)] text-accent">
+                          {item.type === "received" ? "Received" : "Sent"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-text-muted mt-1.5">
+                        {timeAgo(item.data.createdAt, now)}
+                        {item.data.status === "pending" && item.data.expiresAt > 0 && (
+                          <> · expires {timeUntil(item.data.expiresAt, now)}</>
+                        )}
+                        {item.data.claimedAt && (
+                          <> · claimed {timeAgo(item.data.claimedAt, now)}</>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <div
-                        className="w-[6px] h-[6px] rounded-full flex-shrink-0"
+                        className="w-2 h-2 rounded-full"
                         style={{ background: statusDot[item.data.status] }}
                       />
-                      <span className="font-display font-semibold text-[15px] tracking-tight">
-                        {item.data.amount}
-                      </span>
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-soft text-accent">
-                        {item.type === "received" ? "Received" : "Sent"}
-                      </span>
-                      <span
-                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                          item.data.status === "pending"
-                            ? "bg-accent-soft text-accent"
-                            : item.data.status === "claimed"
-                              ? "bg-[rgba(255,255,255,0.06)] text-text-secondary"
-                              : "bg-[rgba(255,255,255,0.03)] text-text-muted"
-                        }`}
-                      >
+                      <span className="text-[11px] font-medium text-text-secondary">
                         {statusLabel[item.data.status] ?? item.data.status}
                       </span>
                     </div>
-                    <div className="text-[11px] text-text-muted mt-1">
-                      {timeAgo(item.data.createdAt, now)}
-                      {item.data.status === "pending" && item.data.expiresAt > 0 && (
-                        <> · expires in {timeUntil(item.data.expiresAt, now)}</>
-                      )}
-                      {item.data.claimedAt && (
-                        <> · claimed {timeAgo(item.data.claimedAt, now)}</>
-                      )}
-                    </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    {item.data.yieldEarned && item.data.yieldEarned !== "0" && item.data.yieldEarned !== "0 SUI" && (
-                      <div className="text-accent text-[13px] font-semibold tabular-nums font-display">
+
+                  {item.type === "sent" && (
+                    <>
+                      <div className="history-card-divider" />
+                      <div
+                        className={`history-card-link ${item.data.status !== "pending" ? "disabled" : ""}`}
+                        onClick={
+                          item.data.status === "pending"
+                            ? () => handleCopyLink(item.data.id, item.data.claimUrl)
+                            : undefined
+                        }
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={`flex-shrink-0 ${
+                            item.data.status === "pending"
+                              ? "text-accent"
+                              : "text-text-muted"
+                          }`}
+                        >
+                          {item.data.status === "pending" ? (
+                            <>
+                              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                            </>
+                          ) : (
+                            <>
+                              <rect x="3" y="11" width="18" height="11" rx="2" />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </>
+                          )}
+                        </svg>
+                        <span
+                          className={`flex-1 font-mono text-[11px] truncate ${
+                            item.data.status === "pending"
+                              ? "text-accent"
+                              : "text-text-muted"
+                          }`}
+                        >
+                          {item.data.claimUrl.length > 50
+                            ? item.data.claimUrl.slice(0, 30) +
+                              "…" +
+                              item.data.claimUrl.slice(-14)
+                            : item.data.claimUrl}
+                        </span>
+                        {item.data.status === "pending" && (
+                          <span className="text-[10px] text-text-muted flex-shrink-0">
+                            {copiedId === item.data.id ? "Copied" : "Copy"}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {item.data.yieldEarned &&
+                    item.data.yieldEarned !== "0" &&
+                    item.data.yieldEarned !== "0 SUI" && (
+                      <div className="history-yield">
                         +{item.data.yieldEarned}
                       </div>
                     )}
-                  </div>
                 </div>
               </motion.div>
             ))}

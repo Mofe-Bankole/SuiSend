@@ -1462,14 +1462,13 @@ html {
 
 /* Enhanced history cards */
 .history-card {
-    padding: 14px 16px;
+    padding: 16px;
     border-radius: 12px;
     border: 1px solid var(--border);
     background: var(--bg-card);
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
+    gap: 10px;
     transition:
         border-color 0.2s,
         transform 0.15s;
@@ -1477,6 +1476,45 @@ html {
 .history-card:hover {
     border-color: rgba(255, 255, 255, 0.08);
     transform: translateY(-1px);
+}
+.history-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+.history-card-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    transition: background 0.15s;
+    margin: 0 -4px;
+}
+.history-card-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+.history-card-link.disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+.history-card-link.disabled:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+.history-card-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0 -16px;
+}
+.history-yield {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-display);
+    color: var(--accent);
+    text-align: right;
 }
 
 /* Filter pill group */
