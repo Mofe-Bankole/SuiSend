@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   useCurrentAccount,
@@ -40,7 +40,12 @@ export default function AppPage() {
   const suiClient = useSuiClient();
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
-  const zkState = getZkLoginState();
+  const [zkState, setZkState] = useState<ReturnType<typeof getZkLoginState>>(null);
+
+  useEffect(() => {
+    setZkState(getZkLoginState());
+  }, []);
+
   const isConnected = !!(account || zkState?.isReady);
   const connectedLabel = account
     ? shortenAddress(account.address)

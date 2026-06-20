@@ -12,7 +12,7 @@ import { getScallopApy } from "@/lib/scallop";
 import { mistToSui, suiToMist, shortenAddress } from "@/lib/constants";
 import { storeText, blobIdToHex } from "@/lib/walrus";
 import { getAppUrl } from "@/lib/url";
-import { getZkLoginState, signWithZkLoginAndExecute } from "@/lib/zklogin";
+import { getZkLoginState, signWithZkLoginAndExecute, type ZkLoginState } from "@/lib/zklogin";
 import type { TxPhase } from "./TxStatusOverlay";
 
 const DAY_MS = 86400000;
@@ -46,9 +46,12 @@ export default function SendTab({
   const [walrusUploading, setWalrusUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const [zkBalance, setZkBalance] = useState<number | null>(null);
+  const [zkState, setZkState] = useState<ZkLoginState | null>(null);
   const linkRef = useRef<HTMLDivElement>(null);
 
-  const zkState = getZkLoginState();
+  useEffect(() => {
+    setZkState(getZkLoginState());
+  }, []);
 
   useEffect(() => {
     if (zkState?.isReady && !account) {

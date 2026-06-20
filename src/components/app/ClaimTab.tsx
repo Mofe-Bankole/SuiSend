@@ -11,7 +11,7 @@ import { lookupPayment, buildClaimPaymentScallopPTB } from "@/lib/suisend";
 import { getScallopApy } from "@/lib/scallop";
 import { useNow, timeAgo, timeUntil } from "@/hooks/useNow";
 import { readText } from "@/lib/walrus";
-import { getZkLoginState, signWithZkLoginAndExecute } from "@/lib/zklogin";
+import { getZkLoginState, signWithZkLoginAndExecute, type ZkLoginState } from "@/lib/zklogin";
 import type { TxPhase } from "./TxStatusOverlay";
 
 export default function ClaimTab({
@@ -41,7 +41,12 @@ export default function ClaimTab({
     sender: string;
   } | null>(null);
 
-  const zkState = getZkLoginState();
+  const [zkState, setZkState] = useState<ZkLoginState | null>(null);
+
+  useEffect(() => {
+    setZkState(getZkLoginState());
+  }, []);
+
   const canClaim =
     !!paymentInfo && paymentInfo.state === 0 && (!!account || zkState?.isReady);
 
