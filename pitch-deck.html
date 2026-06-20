@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="color-scheme" content="dark" />
+        <title>SuiSend — Pitch Deck</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --bg: #08080a;
+                --bg-alt: #0b0b0e;
+                --bg-card: #0f0f12;
+                --accent: #9eff5b;
+                --accent-dim: rgba(158, 255, 91, 0.08);
+                --accent-mid: rgba(158, 255, 91, 0.18);
+                --text-primary: #f0efe9;
+                --text-secondary: rgba(240, 239, 233, 0.65);
+                --text-muted: rgba(240, 239, 233, 0.35);
+                --border: rgba(240, 239, 233, 0.08);
+                --font-display:
+                    "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+                --font-mono:
+                    "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono",
+                    monospace;
+            }
+
+            *,
+            *::before,
+            *::after {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                height: 100%;
+                background: var(--bg);
+            }
+            body {
+                font-family: var(--font-display);
+                color: var(--text-primary);
+                overflow: hidden;
+                -webkit-font-smoothing: antialiased;
+            }
+            ::selection {
+                background: var(--accent-mid);
+                color: var(--text-primary);
+            }
+            ul {
+                list-style: none;
+            }
+
+            /* ---------- deck shell ---------- */
+            .deck {
+                position: relative;
+                width: 100vw;
+                height: 100dvh;
+            }
+
+            .slide {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                padding: clamp(40px, 6vh, 96px) clamp(40px, 8vw, 140px);
+                background: var(--bg);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.45s ease;
+            }
+            .slide.bg-alt {
+                background: var(--bg-alt);
+            }
+            .slide.active {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            .notes {
+                display: none;
+            }
+
+            /* ---------- shared text components ---------- */
+            .slide-head {
+                display: flex;
+                align-items: center;
+                gap: 18px;
+                margin-bottom: clamp(28px, 5vh, 56px);
+                font-family: var(--font-mono);
+            }
+            .s-index {
+                color: var(--text-muted);
+                font-size: 1.125rem;
+                letter-spacing: 0.06em;
+            }
+            .s-divider {
+                width: 28px;
+                height: 1px;
+                background: var(--border);
+            }
+            .s-eyebrow {
+                color: var(--accent);
+                font-size: 1.125rem;
+                letter-spacing: 0.1em;
+            }
+
+            .headline {
+                font-weight: 800;
+                font-size: clamp(2.5rem, 5vw, 4.5rem);
+                line-height: 1.08;
+                letter-spacing: -0.02em;
+                max-width: 20ch;
+            }
+
+            .subhead {
+                font-weight: 500;
+                font-size: clamp(1.75rem, 2.3vw, 2rem);
+                color: var(--text-secondary);
+                margin-top: 1.1rem;
+                max-width: 36ch;
+                line-height: 1.45;
+            }
+
+            .bullet-list {
+                margin-top: clamp(32px, 5vh, 56px);
+                display: flex;
+                flex-direction: column;
+                gap: clamp(16px, 2.6vh, 26px);
+                max-width: 48ch;
+            }
+            .bullet-list li {
+                font-size: clamp(1.75rem, 2.1vw, 2rem);
+                font-weight: 500;
+                display: flex;
+                align-items: baseline;
+                gap: 16px;
+            }
+            .bullet-list li::before {
+                content: "—";
+                color: var(--accent);
+                font-family: var(--font-mono);
+                flex-shrink: 0;
+            }
+
+            .badges-row {
+                display: flex;
+                gap: 10px;
+                margin-bottom: clamp(28px, 5vh, 52px);
+                flex-wrap: wrap;
+            }
+            .badge {
+                font-family: var(--font-mono);
+                font-size: 1.125rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--text-secondary);
+                border: 1px solid var(--border);
+                padding: 8px 16px;
+                border-radius: 100px;
+            }
+
+            /* ---------- title slide ---------- */
+            .title-name {
+                font-weight: 800;
+                font-size: clamp(4rem, 10vw, 8.5rem);
+                letter-spacing: -0.03em;
+                line-height: 1;
+            }
+            .tagline {
+                font-weight: 500;
+                font-size: clamp(1.75rem, 2.6vw, 2.1rem);
+                color: var(--text-secondary);
+                margin-top: 1.4rem;
+                max-width: 30ch;
+                line-height: 1.4;
+            }
+            .sub-line {
+                font-family: var(--font-mono);
+                font-size: 1.125rem;
+                color: var(--text-muted);
+                margin-top: 1.2rem;
+                letter-spacing: 0.02em;
+            }
+
+            .hero-ticker {
+                margin-top: clamp(40px, 6vh, 64px);
+                display: inline-flex;
+                align-items: center;
+                gap: 14px;
+                border: 1px solid var(--border);
+                background: var(--accent-dim);
+                padding: 16px 24px;
+                border-radius: 10px;
+                width: fit-content;
+            }
+            .hero-ticker .dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--accent);
+                animation: pulse 1.8s infinite;
+            }
+            @keyframes pulse {
+                0% {
+                    box-shadow: 0 0 0 0 rgba(158, 255, 91, 0.4);
+                }
+                70% {
+                    box-shadow: 0 0 0 10px rgba(158, 255, 91, 0);
+                }
+                100% {
+                    box-shadow: 0 0 0 0 rgba(158, 255, 91, 0);
+                }
+            }
+            .hero-ticker .label {
+                font-family: var(--font-mono);
+                font-size: 1.125rem;
+                color: var(--text-muted);
+                letter-spacing: 0.04em;
+            }
+            .hero-ticker .value {
+                font-family: var(--font-mono);
+                font-size: 1.4rem;
+                color: var(--accent);
+                font-weight: 600;
+            }
+
+            /* ---------- card grids ---------- */
+            .card-grid-3 {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 24px;
+                margin-top: clamp(32px, 5vh, 56px);
+            }
+            .card-grid-2 {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 28px;
+                margin-top: clamp(32px, 5vh, 56px);
+            }
+            .card-grid-4 {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 20px;
+                margin-top: clamp(32px, 5vh, 56px);
+            }
+
+            .card {
+                background: var(--bg-card);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: clamp(24px, 3vw, 32px);
+                transition:
+                    border-color 0.3s ease,
+                    transform 0.3s ease;
+            }
+            .card:hover {
+                border-color: var(--accent-mid);
+                transform: translateY(-3px);
+            }
+            .card .num {
+                font-family: var(--font-mono);
+                color: var(--accent);
+                font-size: 1.125rem;
+                letter-spacing: 0.05em;
+            }
+            .card h3 {
+                font-size: clamp(1.4rem, 1.8vw, 1.7rem);
+                font-weight: 700;
+                margin-top: 0.6rem;
+            }
+            .card p {
+                font-size: 1.25rem;
+                color: var(--text-secondary);
+                margin-top: 0.7rem;
+                line-height: 1.5;
+            }
+
+            /* ---------- comparison cards ---------- */
+            .compare-card h3 {
+                font-family: var(--font-mono);
+                font-size: 1.125rem;
+                text-transform: lowercase;
+                letter-spacing: 0.06em;
+                color: var(--text-muted);
+                margin-bottom: 18px;
+            }
+            .compare-card.is-sui h3 {
+                color: var(--accent);
+            }
+            .compare-card ul {
+                display: flex;
+                flex-direction: column;
+                gap: 18px;
+            }
+            .compare-card li {
+                font-size: clamp(1.75rem, 2.1vw, 2rem);
+                font-weight: 500;
+                display: flex;
+                gap: 12px;
+                line-height: 1.3;
+            }
+            .compare-card.is-without li::before {
+                content: "×";
+                color: var(--text-muted);
+                font-family: var(--font-mono);
+                flex-shrink: 0;
+            }
+            .compare-card.is-sui li::before {
+                content: "✓";
+                color: var(--accent);
+                font-family: var(--font-mono);
+                flex-shrink: 0;
+            }
+
+            /* ---------- stats / terminal ---------- */
+            .stat-card .stat-value {
+                font-family: var(--font-mono);
+                font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+                color: var(--accent);
+                font-weight: 600;
+            }
+            .stat-card .stat-label {
+                font-size: 1.125rem;
+                color: var(--text-secondary);
+                margin-top: 0.5rem;
+            }
+
+            .terminal-card {
+                margin-top: 28px;
+                background: var(--bg-card);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 22px 28px;
+                max-width: 780px;
+                font-family: var(--font-mono);
+            }
+            .terminal-row {
+                display: flex;
+                gap: 14px;
+                padding: 9px 0;
+                border-bottom: 1px solid var(--border);
+                flex-wrap: wrap;
+            }
+            .terminal-row:last-child {
+                border-bottom: none;
+            }
+            .t-label {
+                color: var(--text-muted);
+                font-size: 1.125rem;
+                min-width: 90px;
+            }
+            .t-value {
+                color: var(--text-secondary);
+                font-size: 1.125rem;
+                word-break: break-all;
+            }
+
+            /* ---------- demo slide ---------- */
+            .placeholder-box {
+                margin-top: clamp(28px, 5vh, 48px);
+                border: 1px dashed var(--border);
+                border-radius: 14px;
+                min-height: clamp(200px, 34vh, 360px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-muted);
+                font-family: var(--font-mono);
+                font-size: 1.25rem;
+                max-width: 900px;
+            }
+            .callout-tags {
+                display: flex;
+                gap: 14px;
+                margin-top: 22px;
+                flex-wrap: wrap;
+            }
+            .callout-tag {
+                font-family: var(--font-mono);
+                font-size: 1.125rem;
+                color: var(--text-secondary);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 8px 14px;
+            }
+            .callout-tag b {
+                color: var(--accent);
+                font-weight: 600;
+            }
+
+            .footer-note {
+                margin-top: clamp(28px, 4vh, 40px);
+                font-family: var(--font-mono);
+                font-size: 1.125rem;
+                color: var(--text-muted);
+            }
+
+            .placeholder-name {
+                display: inline-block;
+                margin-top: 24px;
+                font-family: var(--font-mono);
+                color: var(--text-muted);
+                border: 1px dashed var(--border);
+                padding: 10px 18px;
+                border-radius: 8px;
+                font-size: 1.125rem;
+            }
+
+            /* ---------- contact slide ---------- */
+            .contact-slide {
+                align-items: flex-start;
+            }
+            .c-name {
+                font-weight: 800;
+                font-size: clamp(3.5rem, 8vw, 7rem);
+                letter-spacing: -0.03em;
+            }
+            .c-url {
+                font-family: var(--font-mono);
+                color: var(--accent);
+                font-size: clamp(1.5rem, 2.4vw, 2rem);
+                margin-top: 1rem;
+            }
+            .c-tag {
+                color: var(--text-secondary);
+                font-size: clamp(1.5rem, 2vw, 1.75rem);
+                margin-top: 1.4rem;
+                max-width: 34ch;
+            }
+            .c-meta {
+                font-family: var(--font-mono);
+                color: var(--text-muted);
+                font-size: 1.125rem;
+                margin-top: 2.4rem;
+                word-break: break-all;
+                max-width: 620px;
+            }
+
+            /* ---------- persistent yield ticker (corner motif) ---------- */
+            .ticker {
+                position: fixed;
+                top: 28px;
+                right: 32px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-family: var(--font-mono);
+                font-size: 0.85rem;
+                color: var(--text-muted);
+                z-index: 15;
+                pointer-events: none;
+            }
+            .ticker .tk-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--accent);
+            }
+            .ticker .tk-val {
+                color: var(--accent);
+            }
+
+            /* ---------- click navigation ---------- */
+            .deck-nav {
+                position: fixed;
+                inset: 0;
+                z-index: 5;
+                display: flex;
+            }
+            .nav-zone {
+                flex: 1;
+                height: 100%;
+                cursor: pointer;
+            }
+
+            /* ---------- hud ---------- */
+            .hud {
+                position: fixed;
+                bottom: 24px;
+                left: 0;
+                right: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                z-index: 20;
+                pointer-events: none;
+            }
+            .hud-dots {
+                display: flex;
+                gap: 8px;
+                pointer-events: auto;
+            }
+            .hud-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--border);
+                border: none;
+                cursor: pointer;
+                padding: 0;
+                transition:
+                    background 0.25s ease,
+                    transform 0.25s ease;
+            }
+            .hud-dot.active {
+                background: var(--accent);
+                transform: scale(1.3);
+            }
+            .hud-counter {
+                font-family: var(--font-mono);
+                font-size: 0.95rem;
+                color: var(--text-muted);
+                letter-spacing: 0.05em;
+            }
+            .hud-hint {
+                font-family: var(--font-mono);
+                font-size: 0.8rem;
+                color: var(--text-muted);
+                opacity: 0.6;
+            }
+
+            /* ---------- presenter notes drawer ---------- */
+            .notes-drawer {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: var(--bg-card);
+                border-top: 1px solid var(--border);
+                transform: translateY(100%);
+                transition: transform 0.3s ease;
+                z-index: 30;
+                max-height: 34vh;
+                overflow-y: auto;
+            }
+            .notes-drawer.open {
+                transform: translateY(0);
+            }
+            .notes-drawer-inner {
+                padding: 24px clamp(40px, 8vw, 140px);
+            }
+            .notes-label {
+                font-family: var(--font-mono);
+                font-size: 0.85rem;
+                color: var(--accent);
+                letter-spacing: 0.06em;
+            }
+            .notes-drawer p {
+                margin-top: 10px;
+                font-size: 1.25rem;
+                color: var(--text-secondary);
+                line-height: 1.6;
+                max-width: 80ch;
+            }
+
+            @media (max-width: 760px) {
+                .card-grid-3,
+                .card-grid-2,
+                .card-grid-4 {
+                    grid-template-columns: 1fr;
+                }
+                .slide {
+                    padding: 32px 24px;
+                }
+                .ticker {
+                    display: none;
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                * {
+                    animation: none !important;
+                    transition: none !important;
+                }
+            }
+
+            @page {
+                size: landscape;
+                margin: 0;
+            }
+
+            @media print {
+                html,
+                body {
+                    overflow: visible !important;
+                    height: auto !important;
+                }
+                .deck {
+                    height: auto !important;
+                }
+                .slide {
+                    position: relative !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                    height: 100vh !important;
+                    page-break-after: always;
+                    break-after: page;
+                }
+                .deck-nav,
+                .hud,
+                .notes-drawer,
+                .notes,
+                .ticker {
+                    display: none !important;
+                }
+                * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="deck" id="deck">
+            <section class="slide" data-index="0">
+                <div class="badges-row">
+                    <span class="badge">Sui Overflow</span>
+                    <span class="badge">Move</span>
+                    <span class="badge">Mainnet Live</span>
+                </div>
+                <h1 class="title-name">SuiSend</h1>
+                <p class="tagline">
+                    Send SUI via link. Earn yield while they wait.
+                </p>
+                <div class="sub-line">
+                    live on sui mainnet — no bridging, no waiting
+                </div>
+                <div class="hero-ticker">
+                    <span class="dot"></span>
+                    <span class="label">yield accruing</span>
+                    <span class="value" id="heroTickerValue">0.000000 SUI</span>
+                </div>
+                <div class="notes">
+                    Open with energy. This is SuiSend — payment links that earn
+                    yield while funds are in flight. Let the ticker run for a
+                    second before you start talking; it's doing real work in the
+                    room.
+                </div>
+            </section>
+
+            <section class="slide bg-alt" data-index="1">
+                <div class="slide-head">
+                    <span class="s-index">02</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">the problem</span>
+                </div>
+                <h2 class="headline">Funds sit dead in transit</h2>
+                <ul class="bullet-list">
+                    <li>Idle while sent, zero yield</li>
+                    <li>Recipient needs the right wallet</li>
+                    <li>Escrow holds funds, never grows</li>
+                    <li>Can't send without an address</li>
+                </ul>
+                <div class="notes">
+                    Make them feel this. Every crypto transfer today is binary —
+                    it either lands or it doesn't, and while it's pending that
+                    money just sits there earning nothing. Pause after "dead in
+                    transit."
+                </div>
+            </section>
+
+            <section class="slide" data-index="2">
+                <div class="slide-head">
+                    <span class="s-index">03</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">why now</span>
+                </div>
+                <h2 class="headline">Three things just lined up</h2>
+                <div class="card-grid-3">
+                    <div class="card">
+                        <span class="num">01</span>
+                        <h3>Yield Unlocked</h3>
+                        <p>Real lending yield, finally on Sui.</p>
+                    </div>
+                    <div class="card">
+                        <span class="num">02</span>
+                        <h3>Tech Unlock</h3>
+                        <p>One atomic tx: deposit, mint, send.</p>
+                    </div>
+                    <div class="card">
+                        <span class="num">03</span>
+                        <h3>UX Proven</h3>
+                        <p>Payment links already trusted by billions.</p>
+                    </div>
+                </div>
+                <div class="notes">
+                    This isn't a "someday" idea. Scallop shipped real yield on
+                    Sui, programmable transaction blocks let you chain it
+                    atomically, and people already trust payment links from
+                    Venmo and CashApp. All three landed at once.
+                </div>
+            </section>
+
+            <section class="slide bg-alt" data-index="3">
+                <div class="slide-head">
+                    <span class="s-index">04</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">the solution</span>
+                </div>
+                <h2 class="headline">Send the link. Yield kicks in.</h2>
+                <div class="card-grid-3">
+                    <div class="card">
+                        <span class="num">01</span>
+                        <h3>Yield-In-Flight</h3>
+                        <p>Funds deposit into Scallop instantly.</p>
+                    </div>
+                    <div class="card">
+                        <span class="num">02</span>
+                        <h3>Link-Based Claim</h3>
+                        <p>Any wallet. No address needed.</p>
+                    </div>
+                    <div class="card">
+                        <span class="num">03</span>
+                        <h3>Encrypted Notes</h3>
+                        <p>Optional message, sealed via Walrus.</p>
+                    </div>
+                </div>
+                <div class="footer-note">
+                    unclaimed after expiry → auto-refunded to sender
+                </div>
+                <div class="notes">
+                    Walk through the flow fast: sender creates a link, funds
+                    atomically go into Scallop, recipient claims with any wallet
+                    — base amount plus whatever yield accrued. Mention the
+                    encrypted note as a nice extra, not the headline.
+                </div>
+            </section>
+
+            <section class="slide" data-index="4">
+                <div class="slide-head">
+                    <span class="s-index">05</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">product</span>
+                </div>
+                <h2 class="headline">See it live</h2>
+                <div class="placeholder-box">Drop your app screenshot here</div>
+                <div class="callout-tags">
+                    <span class="callout-tag"
+                        ><b>Send</b> — create a link, set an amount</span
+                    >
+                    <span class="callout-tag"
+                        ><b>Claim</b> — connect any wallet, claim
+                        instantly</span
+                    >
+                    <span class="callout-tag"
+                        ><b>History</b> — live on-chain activity</span
+                    >
+                </div>
+                <div class="footer-note">suisend.xyz</div>
+                <div class="notes">
+                    This is where you show the actual product. Swap the
+                    placeholder for a real screenshot, or better, switch live
+                    between the Send, Claim, and History tabs while you talk.
+                </div>
+            </section>
+
+            <section class="slide bg-alt" data-index="5">
+                <div class="slide-head">
+                    <span class="s-index">06</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">why sui</span>
+                </div>
+                <h2 class="headline">Remove the chain, break the product</h2>
+                <div class="card-grid-2">
+                    <div class="card compare-card is-without">
+                        <h3>without blockchain</h3>
+                        <ul>
+                            <li>Needs a trusted intermediary</li>
+                            <li>3–5 day settlement</li>
+                            <li>No composable yield</li>
+                        </ul>
+                    </div>
+                    <div class="card compare-card is-sui">
+                        <h3>with sui</h3>
+                        <ul>
+                            <li>Atomic deposit, mint, and link</li>
+                            <li>Instant settlement, no KYC</li>
+                            <li>Composable yield through Scallop</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="notes">
+                    Hit this hard. Without a blockchain you need an
+                    intermediary, days of settlement, and KYC. With Sui it's one
+                    atomic transaction and yield without any wrapping contracts.
+                    Take away the chain and the product breaks — that's the
+                    test.
+                </div>
+            </section>
+
+            <section class="slide" data-index="6">
+                <div class="slide-head">
+                    <span class="s-index">07</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">traction</span>
+                </div>
+                <h2 class="headline">Live on mainnet. Not a mockup.</h2>
+                <div class="card-grid-4">
+                    <div class="card stat-card">
+                        <div class="stat-value">4</div>
+                        <div class="stat-label">Move modules deployed</div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="stat-value">1</div>
+                        <div class="stat-label">confirmed mainnet tx</div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="stat-value">deposit → claim</div>
+                        <div class="stat-label">full yield cycle works</div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="stat-value">live</div>
+                        <div class="stat-label">
+                            on-chain stats, polled real-time
+                        </div>
+                    </div>
+                </div>
+                <div class="terminal-card">
+                    <div class="terminal-row">
+                        <span class="t-label">network</span
+                        ><span class="t-value">sui mainnet</span>
+                    </div>
+                    <div class="terminal-row">
+                        <span class="t-label">package</span
+                        ><span class="t-value"
+                            >0xbefdf37eec293a5a26e0d28c9f3161d325e50661f88390c6179d92bb44f1e06e</span
+                        >
+                    </div>
+                    <div class="terminal-row">
+                        <span class="t-label">first tx</span
+                        ><span class="t-value"
+                            >HkeqZBFuk8hWJQhBJqzjRt8HH8UFv1hhJKGK37MJmgQ1</span
+                        >
+                    </div>
+                </div>
+                <div class="notes">
+                    This is real, not a pitch. Four modules are live on mainnet,
+                    here's the actual transaction hash, and the yield cycle has
+                    run end to end — deposit, mint, redeem, plus the yield.
+                    Judges can verify all of it on an explorer.
+                </div>
+            </section>
+
+            <section class="slide bg-alt" data-index="7">
+                <div class="slide-head">
+                    <span class="s-index">08</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">team</span>
+                </div>
+                <h2 class="headline">One builder. Full stack.</h2>
+                <p class="subhead">
+                    Contracts, frontend, and deployment — all one person, start
+                    to finish.
+                </p>
+                <span class="placeholder-name">Bankole Adedotun</span>
+                <div class="notes">
+                    Keep this short. One person built the contracts, the
+                    frontend, and shipped it to mainnet. Say it plainly and move
+                    on.
+                </div>
+            </section>
+
+            <section class="slide" data-index="8">
+                <div class="slide-head">
+                    <span class="s-index">09</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">the ask</span>
+                </div>
+                <h2 class="headline">Built end to end. Vote for it.</h2>
+                <ul class="bullet-list">
+                    <li>Full stack: contracts, frontend, deploy</li>
+                    <li>Real usage on Sui mainnet</li>
+                    <li>Composable yield through Scallop</li>
+                    <li>A genuinely new primitive: yield-in-flight</li>
+                </ul>
+                <div class="footer-note">
+                    next: zkLogin · multi-token support · mobile app
+                </div>
+                <div class="notes">
+                    Bring it home: full stack, real usage, real composability,
+                    and a genuinely new primitive. Tell them what you want —
+                    their vote — and that the roadmap is already mapped out.
+                </div>
+            </section>
+
+            <section class="slide bg-alt contact-slide" data-index="9">
+                <div class="slide-head">
+                    <span class="s-index">10</span
+                    ><span class="s-divider"></span
+                    ><span class="s-eyebrow">contact</span>
+                </div>
+                <div class="c-name">SuiSend</div>
+                <div class="c-url">suisend.xyz</div>
+                <div class="c-tag">
+                    Send SUI via link. Earn yield while they wait.
+                </div>
+                <div class="c-meta">
+                    0xbefdf37eec293a5a26e0d28c9f3161d325e50661f88390c6179d92bb44f1e06e
+                    — built on Sui
+                </div>
+                <div class="notes">
+                    Close clean. Say the name, say the URL, let it sit for a
+                    second before you stop talking.
+                </div>
+            </section>
+        </div>
+
+        <div class="deck-nav" aria-hidden="true">
+            <div class="nav-zone" id="navPrev"></div>
+            <div class="nav-zone" id="navNext"></div>
+        </div>
+
+        <div class="ticker" id="cornerTicker">
+            <span class="tk-dot"></span>
+            <span>yield accruing</span>
+            <span class="tk-val" id="tickerValue">0.000000 SUI</span>
+        </div>
+
+        <div class="hud">
+            <div class="hud-dots" id="hudDots"></div>
+            <div class="hud-counter">
+                <span id="counterCurrent">01</span> /
+                <span id="counterTotal">10</span>
+            </div>
+            <div class="hud-hint">← → navigate · space advance · N notes</div>
+        </div>
+
+        <div class="notes-drawer" id="notesDrawer">
+            <div class="notes-drawer-inner">
+                <span class="notes-label"
+                    >presenter notes — press N to hide</span
+                >
+                <p id="notesContent"></p>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                var slides = Array.prototype.slice.call(
+                    document.querySelectorAll(".slide"),
+                );
+                var total = slides.length;
+                var current = 0;
+                var notesOpen = false;
+                var reduceMotion = window.matchMedia(
+                    "(prefers-reduced-motion: reduce)",
+                ).matches;
+
+                var hudDots = document.getElementById("hudDots");
+                var counterCurrent = document.getElementById("counterCurrent");
+                var counterTotal = document.getElementById("counterTotal");
+                var notesDrawer = document.getElementById("notesDrawer");
+                var notesContent = document.getElementById("notesContent");
+                var cornerTicker = document.getElementById("cornerTicker");
+
+                counterTotal.textContent = String(total).padStart(2, "0");
+
+                slides.forEach(function (s, i) {
+                    var dot = document.createElement("button");
+                    dot.className = "hud-dot";
+                    dot.setAttribute("aria-label", "Go to slide " + (i + 1));
+                    dot.addEventListener("click", function () {
+                        goTo(i);
+                    });
+                    hudDots.appendChild(dot);
+                });
+                var dots = Array.prototype.slice.call(
+                    hudDots.querySelectorAll(".hud-dot"),
+                );
+
+                function render() {
+                    slides.forEach(function (s, i) {
+                        s.classList.toggle("active", i === current);
+                    });
+                    dots.forEach(function (d, i) {
+                        d.classList.toggle("active", i === current);
+                    });
+                    counterCurrent.textContent = String(current + 1).padStart(
+                        2,
+                        "0",
+                    );
+                    cornerTicker.style.display =
+                        current === 0 ? "none" : "flex";
+                    var notesEl = slides[current].querySelector(".notes");
+                    notesContent.textContent = notesEl
+                        ? notesEl.textContent.trim()
+                        : "";
+                }
+
+                function go(delta) {
+                    current = Math.max(0, Math.min(total - 1, current + delta));
+                    render();
+                }
+                function goTo(i) {
+                    current = Math.max(0, Math.min(total - 1, i));
+                    render();
+                }
+                function toggleNotes() {
+                    notesOpen = !notesOpen;
+                    notesDrawer.classList.toggle("open", notesOpen);
+                }
+
+                document.addEventListener("keydown", function (e) {
+                    if (e.code === "ArrowRight" || e.code === "Space") {
+                        e.preventDefault();
+                        go(1);
+                    } else if (e.code === "ArrowLeft") {
+                        go(-1);
+                    } else if (e.code === "KeyN") {
+                        toggleNotes();
+                    }
+                });
+
+                document
+                    .getElementById("navPrev")
+                    .addEventListener("click", function () {
+                        go(-1);
+                    });
+                document
+                    .getElementById("navNext")
+                    .addEventListener("click", function () {
+                        go(1);
+                    });
+
+                // yield-in-flight ticker — cosmetic, deterministic-feeling accrual
+                var heroVal = document.getElementById("heroTickerValue");
+                var cornerVal = document.getElementById("tickerValue");
+                var y = 0;
+                function fmt(v) {
+                    return v.toFixed(6) + " SUI";
+                }
+
+                if (reduceMotion) {
+                    if (heroVal) heroVal.textContent = fmt(0.000412);
+                    if (cornerVal) cornerVal.textContent = fmt(0.000412);
+                } else {
+                    setInterval(function () {
+                        y += Math.random() * 0.000009 + 0.000001;
+                        if (heroVal) heroVal.textContent = fmt(y);
+                        if (cornerVal) cornerVal.textContent = fmt(y);
+                    }, 650);
+                }
+
+                render();
+            })();
+        </script>
+    </body>
+</html>
