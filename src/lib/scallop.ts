@@ -55,6 +55,24 @@ export async function getScallopApy(
   }
 }
 
+export async function getScallopUsdcApy(
+  suiClient: SuiJsonRpcClient,
+): Promise<number> {
+  try {
+    if (!suiClient) return 5.0;
+    const builder = await getScallopBuilder(suiClient);
+    const market = await builder.query.queryMarket();
+    const usdcPool = market.pools.usdc;
+    if (usdcPool) {
+      const supplyApy = Number(usdcPool.supplyApy) * 100;
+      return supplyApy || 5.0;
+    }
+    return 5.0;
+  } catch {
+    return 5.0;
+  }
+}
+
 export async function buildDepositPTB(
   suiClient: SuiJsonRpcClient,
   sender: string,

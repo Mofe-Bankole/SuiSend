@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   useCurrentAccount,
   useSuiClient,
@@ -9,8 +9,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { lookupPayment, buildClaimPaymentScallopPTB } from "@/lib/suisend";
 import { getScallopApy } from "@/lib/scallop";
-import { useNow, timeAgo, timeUntil } from "@/hooks/useNow";
-import { readText } from "@/lib/walrus";
+import { useNow, timeUntil } from "@/hooks/useNow";
 import { getZkLoginState, signWithZkLoginAndExecute, type ZkLoginState } from "@/lib/zklogin";
 import type { TxPhase } from "./TxStatusOverlay";
 

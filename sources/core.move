@@ -24,9 +24,11 @@
 ///   holds SUI directly; all funds flow through the yield vault.
 module suisend::core {
     use sui::clock::Clock;
-    use sui::coin::Coin;
+    use sui::coin::{Self, Coin};
+    use sui::dynamic_field as df;
     use sui::event;
     use sui::object::{Self, ID, UID};
+    use std::option::{Self, Option};
     use sui::sui::SUI;
     use sui::table::{Self, Table};
     use sui::transfer;
@@ -40,6 +42,7 @@ module suisend::core {
 
     use suisend::yield_scallop;
     use suisend::yield_scallop::ScallopYieldVault;
+    use suisend::yield_scallop::ScallopYieldVaultGeneric;
 
     // ─── Constants ───────────────────────────────────────────────────────────
 
@@ -208,7 +211,7 @@ module suisend::core {
         link_hash: vector<u8>,
         /// Address of the sender.
         sender: address,
-        /// Amount deposited (in MIST).
+        /// Amount deposited (in MIST for SUI, 10^6 for USDC).
         amount: u64,
         /// Protocol the funds were deposited into.
         protocol: u8,
@@ -666,6 +669,16 @@ module suisend::core {
         table::length(&book.payments)
     }
 
+    /// Get the coin type for a payment (0 = SUI, 1 = USDC).
+    /// Defaults to 0 (SUI) for backward compatibility with existing payments.
+    public fun payment_coin_type(book: &PaymentBook, link_hash: vector<u8>): u8 {
+        if (df::exists_with_type<vector<u8>, u8>(&book.id, link_hash)) {
+            *df::borrow<vector<u8>, u8>(&book.id, link_hash)
+        } else {
+            0
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     //  SCALLOP-SPECIFIC PAYMENT FUNCTIONS
     //
@@ -831,6 +844,207 @@ module suisend::core {
         assert!(now >= record.expiry, ENotYetExpired);
 
         let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = total_value - record.amount;
+
+        transfer::public_transfer(coin, record.sender);
+
+        event::emit(PaymentRefundedEvent {
+            link_hash,
+            sender: record.sender,
+            amount: record.amount,
+            yield_earned,
+            refunded_at: now,
+            initiator: b"agent",
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  GENERIC PAYMENT FUNCTIONS (any coin type)
+    //
+    //  These functions work with ANY coin via the generic vault
+    //  `ScallopYieldVaultGeneric<T>`. The frontend passes the
+    //  coin type as a PTB type argument at call time — no
+    //  compile-time dependency on external coin types needed.
+    //
+    //  ┌─ When to use ─────────────────────────────────────────┐
+    //  │                                                        │
+    //  │  For USDC (Wormhole), the frontend passes:             │
+    //  │    typeArguments: ["0xdba346...::usdc::USDC"]          │
+    //  │                                                        │
+    //  │  The `coin_type` parameter distinguishes coins in      │
+    //  │  events so the frontend can format amounts correctly:  │
+    //  │    0 = SUI (9 decimals)                                │
+    //  │    1 = USDC (6 decimals)                               │
+    //  │                                                        │
+    //  │  Existing SUI-specific functions (create_payment_scallop│
+    //  │  etc.) are unchanged — call those for SUI payments.    │
+    //  │  Call these generic functions for USDC and any future   │
+    //  │  coin types.                                           │
+    //  └────────────────────────────────────────────────────────┘
+    // ═══════════════════════════════════════════════════════════════
+
+    /// Create a payment for any coin type using Scallop's lending pool.
+    ///
+    /// Generic version of `create_payment_scallop`. Handles USDC, USDT,
+    /// or any coin with a Scallop pool.
+    ///
+    /// ## Parameters (new vs SUI version)
+    /// - `vault`: `ScallopYieldVaultGeneric<T>` instead of `ScallopYieldVault`
+    /// - `coin`: `Coin<T>` instead of `Coin<SUI>`
+    /// - `coin_type`: discriminator for events (0=SUI, 1=USDC, ...)
+    public entry fun create_payment_generic<T>(
+        book: &mut PaymentBook,
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        coin: Coin<T>,
+        link_hash: vector<u8>,
+        note_blob_id: Option<vector<u8>>,
+        expiry_offset_ms: u64,
+        coin_type: u8,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(!table::contains(&book.payments, link_hash), ELinkHashAlreadyExists);
+        assert!(expiry_offset_ms >= MIN_LOCKUP_MS, EInvalidExpiry);
+        let actual_expiry_offset = if (expiry_offset_ms > MAX_LOCKUP_MS) {
+            MAX_LOCKUP_MS
+        } else {
+            expiry_offset_ms
+        };
+
+        let amount = coin.value();
+        let position_id = yield_scallop::deposit_generic(vault, coin, version, market, clock, ctx);
+
+        let now = clock.timestamp_ms();
+        table::add(&mut book.payments, copy link_hash, PaymentRecord {
+            link_hash: copy link_hash,
+            sender: tx_context::sender(ctx),
+            amount,
+            position_id,
+            protocol: 1,
+            created_at: now,
+            expiry: now + actual_expiry_offset,
+            state: STATE_ACTIVE,
+            note_blob_id,
+            recipient: option::none(),
+        });
+
+        df::add<vector<u8>, u8>(&mut book.id, copy link_hash, coin_type);
+
+        let voucher = PaymentVoucher {
+            id: object::new(ctx),
+            sender: tx_context::sender(ctx),
+            link_hash: copy link_hash,
+        };
+        transfer::public_transfer(voucher, tx_context::sender(ctx));
+
+        event::emit(PaymentCreatedEvent {
+            link_hash,
+            sender: tx_context::sender(ctx),
+            amount,
+            protocol: 1,
+            created_at: now,
+            expiry: now + actual_expiry_offset,
+        });
+    }
+
+    /// Claim a payment for any coin type.
+    public entry fun claim_payment_generic<T>(
+        book: &mut PaymentBook,
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        link_hash: vector<u8>,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        let record = table::remove(&mut book.payments, link_hash);
+        assert!(record.state == STATE_ACTIVE, EWrongState);
+
+        let recipient = tx_context::sender(ctx);
+        let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = total_value - record.amount;
+
+        transfer::public_transfer(coin, recipient);
+
+        let receipt = ClaimReceipt{
+            id : object::new(ctx),
+            payment_link_hash: link_hash,
+            original_amount: record.amount,
+            yield_earned,
+            total_claimed: total_value,
+            claimed_at: clock.timestamp_ms(),
+            recipient,
+        };
+        transfer::public_transfer(receipt, recipient);
+
+        event::emit(PaymentClaimedEvent {
+            link_hash,
+            recipient,
+            amount: record.amount,
+            yield_earned,
+            claimed_at: clock.timestamp_ms(),
+        });
+    }
+
+    /// Refund a payment via sender voucher (any coin type).
+    public entry fun refund_sender_generic<T>(
+        book: &mut PaymentBook,
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        voucher: PaymentVoucher,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(voucher.sender == tx_context::sender(ctx), EUnauthorized);
+
+        let link_hash = voucher.link_hash;
+        let PaymentVoucher { id: voucher_id, sender: _, link_hash: _ } = voucher;
+        object::delete(voucher_id);
+
+        let record = table::remove(&mut book.payments, link_hash);
+        assert!(record.state == STATE_ACTIVE, EWrongState);
+
+        let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = total_value - record.amount;
+
+        transfer::public_transfer(coin, record.sender);
+
+        event::emit(PaymentRefundedEvent {
+            link_hash,
+            sender: record.sender,
+            amount: record.amount,
+            yield_earned,
+            refunded_at: clock.timestamp_ms(),
+            initiator: b"sender",
+        });
+    }
+
+    /// Refund an expired payment (agent-initiated) for any coin type.
+    public entry fun refund_expired_generic<T>(
+        book: &mut PaymentBook,
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        link_hash: vector<u8>,
+        cap: &RefundAgentCap,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(cap.agent == tx_context::sender(ctx), EUnauthorized);
+
+        let record = table::remove(&mut book.payments, link_hash);
+        assert!(record.state == STATE_ACTIVE, EWrongState);
+
+        let now = clock.timestamp_ms();
+        assert!(now >= record.expiry, ENotYetExpired);
+
+        let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
         let total_value = coin.value();
         let yield_earned = total_value - record.amount;
 

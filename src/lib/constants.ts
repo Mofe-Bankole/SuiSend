@@ -1,7 +1,7 @@
 "use client";
 
 export const SUISEND_PACKAGE_ID =
-  "0xbefdf372ed7b01a45561b71eb62ba2aed0370f7b79221d42ba1a14e8f75d6fe9";
+  "0x837811a8e28aab9c0d5ca9b369aa1da1e178de3e4c1a1c6f33dbf025738ee852";
 export const PAYMENT_BOOK_ID =
   "0x4889941e6073c7e3bebc602c1a09ebc014c64a2b9137569a20100ece0219bafd";
 export const YIELD_VAULT_ID =
@@ -29,8 +29,20 @@ export const NETWORK = "mainnet" as const;
 export const SUI_DECIMALS = 9;
 export const SUI_PER_MIST = 1_000_000_000;
 
+export const USDC_DECIMALS = 6;
+export const USDC_PER_UNIT = 1_000_000;
+
+export const USDC_COIN_TYPE =
+  "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC";
+
+export const SCALLOP_YIELD_VAULT_USDC_ID =
+  "0x0d78f124d69b13b9d3deba0d9c9711499ca8ad0fa23dd9140f9aed26ba0cf6cb";
+
 export const EXPIRY_DAYS = 14;
 export const EXPIRY_MS = EXPIRY_DAYS * 86400 * 1000;
+
+export const COIN_TYPE_SUI = 0;
+export const COIN_TYPE_USDC = 1;
 
 export function mistToSui(mist: bigint): number {
   return Number(mist) / SUI_PER_MIST;
@@ -38,6 +50,14 @@ export function mistToSui(mist: bigint): number {
 
 export function suiToMist(sui: number): bigint {
   return BigInt(Math.round(sui * SUI_PER_MIST));
+}
+
+export function mistToUsdc(mist: bigint): number {
+  return Number(mist) / USDC_PER_UNIT;
+}
+
+export function usdcToMist(usdc: number): bigint {
+  return BigInt(Math.round(usdc * USDC_PER_UNIT));
 }
 
 export function shortenAddress(addr: string, chars = 4): string {

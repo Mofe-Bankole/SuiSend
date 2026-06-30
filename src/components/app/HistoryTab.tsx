@@ -218,11 +218,6 @@ export default function HistoryTab() {
                       <div className="history-card-divider" />
                       <div
                         className={`history-card-link ${item.data.status !== "pending" ? "disabled" : ""}`}
-                        onClick={
-                          item.data.status === "pending"
-                            ? () => handleCopyLink(item.data.id, item.data.claimUrl)
-                            : undefined
-                        }
                       >
                         <svg
                           width="12"
@@ -265,9 +260,69 @@ export default function HistoryTab() {
                             : item.data.claimUrl}
                         </span>
                         {item.data.status === "pending" && (
-                          <span className="text-[10px] text-text-muted flex-shrink-0">
-                            {copiedId === item.data.id ? "Copied" : "Copy"}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              className="history-card-link-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(item.data.claimUrl, "_blank");
+                              }}
+                              aria-label="Open link"
+                              title="Open claim link"
+                            >
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                              </svg>
+                            </button>
+                            <button
+                              className="history-card-link-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyLink(item.data.id, item.data.claimUrl);
+                              }}
+                              aria-label="Copy link"
+                            >
+                              {copiedId === item.data.id ? (
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              ) : (
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
                         )}
                       </div>
                     </>

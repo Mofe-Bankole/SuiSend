@@ -9,10 +9,8 @@ authors = ["SuiSend Team"]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
 
 [addresses]
-suisend = "0x0"
-
-[dev-addresses]
-suisend = "0xCAFE"
+suisend = "0xbefdf372ed7b01a45561b71eb62ba2aed0370f7b79221d42ba1a14e8f75d6fe9"
+usdc = "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7"
 
 [dependencies.ScallopProtocol]
 git = "https://github.com/scallop-io/sui-lending-protocol.git"

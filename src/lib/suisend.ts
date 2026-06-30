@@ -7,9 +7,12 @@ import {
   SUISEND_PACKAGE_ID,
   PAYMENT_BOOK_ID,
   SCALLOP_YIELD_VAULT_ID,
+  SCALLOP_YIELD_VAULT_USDC_ID,
   SCALLOP_VERSION_ID,
   SCALLOP_MARKET_ID,
   EXPIRY_DAYS,
+  COIN_TYPE_USDC,
+  USDC_COIN_TYPE,
 } from "./constants";
 import { getAppUrl } from "./url";
 
@@ -40,7 +43,8 @@ export interface ClaimRecord {
   claimedAt: number;
 }
 
-const CLOCK_ID = "0x0000000000000000000000000000000000000000000000000000000000000006";
+const CLOCK_ID =
+  "0x0000000000000000000000000000000000000000000000000000000000000006";
 
 export function randomHashHex(): string {
   const bytes = new Uint8Array(32);
@@ -59,7 +63,10 @@ export function buildCreatePaymentScallopPTB(params: {
   const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.amount)]);
 
   const noteBlobId = params.noteBlobIdHex
-    ? tx.pure.option("vector<u8>", Array.from(fromHex(params.noteBlobIdHex.replace("0x", ""))))
+    ? tx.pure.option(
+        "vector<u8>",
+        Array.from(fromHex(params.noteBlobIdHex.replace("0x", ""))),
+      )
     : tx.pure.option("vector<u8>", []);
 
   tx.moveCall({
@@ -68,7 +75,10 @@ export function buildCreatePaymentScallopPTB(params: {
       tx.object(PAYMENT_BOOK_ID),
       tx.object(SCALLOP_YIELD_VAULT_ID),
       coin,
-      tx.pure.vector("u8", Array.from(fromHex(params.linkHashHex.replace("0x", "")))),
+      tx.pure.vector(
+        "u8",
+        Array.from(fromHex(params.linkHashHex.replace("0x", ""))),
+      ),
       noteBlobId,
       tx.pure.u64(params.expiryOffsetMs ?? EXPIRY_DAYS * 86400 * 1000),
       tx.object(SCALLOP_VERSION_ID),
@@ -127,28 +137,44 @@ export async function lookupPayment(
   linkHashHex: string,
 ): Promise<PaymentLookup> {
   const linkHashBytes = fromHex(linkHashHex.replace("0x", ""));
-  const dummySender = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const dummySender =
+    "0x0000000000000000000000000000000000000000000000000000000000000000";
 
   const tx = new Transaction();
   tx.moveCall({
     target: `${SUISEND_PACKAGE_ID}::core::payment_exists`,
-    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.pure.vector("u8", Array.from(linkHashBytes)),
+    ],
   });
   tx.moveCall({
     target: `${SUISEND_PACKAGE_ID}::core::payment_amount`,
-    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.pure.vector("u8", Array.from(linkHashBytes)),
+    ],
   });
   tx.moveCall({
     target: `${SUISEND_PACKAGE_ID}::core::payment_expiry`,
-    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.pure.vector("u8", Array.from(linkHashBytes)),
+    ],
   });
   tx.moveCall({
     target: `${SUISEND_PACKAGE_ID}::core::payment_state`,
-    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.pure.vector("u8", Array.from(linkHashBytes)),
+    ],
   });
   tx.moveCall({
     target: `${SUISEND_PACKAGE_ID}::core::payment_sender`,
-    arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(linkHashBytes))],
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.pure.vector("u8", Array.from(linkHashBytes)),
+    ],
   });
 
   try {
@@ -188,7 +214,8 @@ async function batchCheckPaymentStates(
 ): Promise<Map<string, { state: number; exists: boolean }>> {
   if (linkHashes.length === 0) return new Map();
 
-  const dummySender = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const dummySender =
+    "0x0000000000000000000000000000000000000000000000000000000000000000";
   const map = new Map<string, { state: number; exists: boolean }>();
 
   const tx = new Transaction();
@@ -196,11 +223,17 @@ async function batchCheckPaymentStates(
     const bytes = fromHex(hash.replace("0x", ""));
     tx.moveCall({
       target: `${SUISEND_PACKAGE_ID}::core::payment_exists`,
-      arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(bytes))],
+      arguments: [
+        tx.object(PAYMENT_BOOK_ID),
+        tx.pure.vector("u8", Array.from(bytes)),
+      ],
     });
     tx.moveCall({
       target: `${SUISEND_PACKAGE_ID}::core::payment_state`,
-      arguments: [tx.object(PAYMENT_BOOK_ID), tx.pure.vector("u8", Array.from(bytes))],
+      arguments: [
+        tx.object(PAYMENT_BOOK_ID),
+        tx.pure.vector("u8", Array.from(bytes)),
+      ],
     });
   }
 
@@ -215,7 +248,9 @@ async function batchCheckPaymentStates(
     for (let i = 0; i < linkHashes.length; i++) {
       const existsBytes = result.results[i * 2]?.returnValues?.[0]?.[0];
       const stateBytes = result.results[i * 2 + 1]?.returnValues?.[0]?.[0];
-      const exists = existsBytes ? decodeBool(new Uint8Array(existsBytes)) : false;
+      const exists = existsBytes
+        ? decodeBool(new Uint8Array(existsBytes))
+        : false;
       const state = stateBytes ? decodeU8(new Uint8Array(stateBytes)) : 0;
       map.set(linkHashes[i], { state, exists });
     }
@@ -224,6 +259,103 @@ async function batchCheckPaymentStates(
   }
 
   return map;
+}
+
+export function buildCreatePaymentGenericPTB(params: {
+  amount: bigint;
+  linkHashHex: string;
+  noteBlobIdHex?: string;
+  expiryOffsetMs?: number;
+  vaultId: string;
+  coinType: string;
+  coinTypeId: number;
+  coinObjectId: string;
+}): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudgetIfNotSet(BigInt(20000000));
+
+  const coin = tx.object(params.coinObjectId);
+  const [paymentCoin] = tx.splitCoins(coin, [tx.pure.u64(params.amount)]);
+
+  const noteBlobId = params.noteBlobIdHex
+    ? tx.pure.option(
+        "vector<u8>",
+        Array.from(fromHex(params.noteBlobIdHex.replace("0x", ""))),
+      )
+    : tx.pure.option("vector<u8>", []);
+
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::create_payment_generic`,
+    typeArguments: [params.coinType],
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.object(params.vaultId),
+      paymentCoin,
+      tx.pure.vector(
+        "u8",
+        Array.from(fromHex(params.linkHashHex.replace("0x", ""))),
+      ),
+      noteBlobId,
+      tx.pure.u64(params.expiryOffsetMs ?? EXPIRY_DAYS * 86400 * 1000),
+      tx.pure.u8(params.coinTypeId),
+      tx.object(SCALLOP_VERSION_ID),
+      tx.object(SCALLOP_MARKET_ID),
+      tx.object(CLOCK_ID),
+    ],
+  });
+
+  return tx;
+}
+
+export function buildClaimPaymentGenericPTB(params: {
+  linkHashHex: string;
+  vaultId: string;
+  coinType: string;
+  coinTypeId: number;
+}): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudgetIfNotSet(BigInt(20000000));
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::claim_payment_generic`,
+    typeArguments: [params.coinType],
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.object(params.vaultId),
+      tx.pure.vector(
+        "u8",
+        Array.from(fromHex(params.linkHashHex.replace("0x", ""))),
+      ),
+      tx.pure.u8(params.coinTypeId),
+      tx.object(SCALLOP_VERSION_ID),
+      tx.object(SCALLOP_MARKET_ID),
+      tx.object(CLOCK_ID),
+    ],
+  });
+  return tx;
+}
+
+export function buildCreatePaymentUSDCPTB(params: {
+  amount: bigint;
+  linkHashHex: string;
+  noteBlobIdHex?: string;
+  expiryOffsetMs?: number;
+  coinObjectId: string;
+}): Transaction {
+  return buildCreatePaymentGenericPTB({
+    ...params,
+    vaultId: SCALLOP_YIELD_VAULT_USDC_ID,
+    coinType: USDC_COIN_TYPE,
+    coinTypeId: COIN_TYPE_USDC,
+  });
+}
+
+export function buildClaimPaymentUSDCPTB(linkHashHex: string): Transaction {
+  return buildClaimPaymentGenericPTB({
+    linkHashHex,
+    vaultId: SCALLOP_YIELD_VAULT_USDC_ID,
+    coinType: USDC_COIN_TYPE,
+    coinTypeId: COIN_TYPE_USDC,
+  });
 }
 
 export async function queryUserSentPayments(
@@ -241,7 +373,10 @@ export async function queryUserSentPayments(
     .filter((e) => {
       const parsed = e.parsedJson as Record<string, unknown> | null;
       if (!parsed?.sender) return false;
-      return normalizeSuiAddress(parsed.sender as string) === normalizeSuiAddress(address);
+      return (
+        normalizeSuiAddress(parsed.sender as string) ===
+        normalizeSuiAddress(address)
+      );
     })
     .map((e) => {
       const parsed = e.parsedJson as Record<string, unknown>;

@@ -1424,6 +1424,26 @@ html {
 .lgp-copy.copied {
     color: var(--accent);
 }
+.lgp-open {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition:
+        color 0.2s,
+        background 0.2s;
+}
+.lgp-open:hover {
+    color: var(--accent);
+    background: var(--accent-soft);
+}
 .lgp-note {
     font-size: 11px;
     color: var(--text-muted);
@@ -1503,6 +1523,23 @@ html {
 }
 .history-card-link.disabled:hover {
     background: rgba(255, 255, 255, 0.03);
+}
+.history-card-link-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    transition: background 0.15s;
+    padding: 0;
+}
+.history-card-link-btn:hover {
+    background: rgba(158, 255, 91, 0.1);
 }
 .history-card-divider {
     height: 1px;

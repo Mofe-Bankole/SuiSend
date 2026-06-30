@@ -87,15 +87,24 @@ export default function RoadmapSection() {
 
       <div className="grid grid-cols-4 gap-4 max-md:grid-cols-2">
         {phases.map((phase, i) => {
-          const delays = [undefined, "rd1" as const, "rd2" as const, "rd3" as const];
+          const delays = [
+            undefined,
+            "rd1" as const,
+            "rd2" as const,
+            "rd3" as const,
+          ];
           return (
             <Reveal key={phase.label} delay={delays[i]}>
               <div
                 className={`rounded-xl border p-6 ${statusStyles[phase.status]} transition-all duration-300`}
               >
                 <div className="flex items-center gap-2 mb-4">
-                  <div className={`w-2.5 h-2.5 rounded-full ${dotStyles[phase.status]}`} />
-                  <span className={`text-[10px] uppercase tracking-[0.08em] font-semibold ${labelStyles[phase.status]}`}>
+                  <div
+                    className={`w-2.5 h-2.5 rounded-full ${dotStyles[phase.status]}`}
+                  />
+                  <span
+                    className={`text-[10px] uppercase tracking-[0.08em] font-semibold ${labelStyles[phase.status]}`}
+                  >
                     {phase.label}
                   </span>
                 </div>
@@ -104,8 +113,19 @@ export default function RoadmapSection() {
                 </h3>
                 <ul className="space-y-2.5">
                   {phase.items.map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-[13px] text-text-secondary leading-relaxed">
-                      <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-accent" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <li
+                      key={item}
+                      className="flex items-start gap-2 text-[13px] text-text-secondary leading-relaxed"
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-accent"
+                        viewBox="0 0 14 14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <polyline points="2,7 5.5,10.5 12,4" />
                       </svg>
                       {item}

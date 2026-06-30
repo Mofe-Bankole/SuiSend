@@ -175,4 +175,202 @@ module suisend::yield_scallop {
     public fun total_scoin_balance(vault: &ScallopYieldVault): u64 {
         balance::value(&vault.scoin_balance)
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  GENERIC VAULT (for USDC, USDT, and future coins)
+    //
+    //  ┌─ Why a generic vault? ─────────────────────────────────────┐
+    //  │                                                            │
+    //  │  The concrete ScallopYieldVault above is hard-coded to     │
+    //  │  MarketCoin<SUI>. To support USDC without importing the    │
+    //  │  external Wormhole USDC type at compile time, we make the  │
+    //  │  vault generic over a phantom type parameter T.            │
+    //  │                                                            │
+    //  │  ┌─ Sui Move phantom generics ──────────────────────┐      │
+    //  │  │  struct ScallopYieldVaultGeneric<phantom T>      │      │
+    //  │  │                                                  │      │
+    //  │  │  "phantom" means T is never read or written at   │      │
+    //  │  │  runtime — it only exists at the type level to   │      │
+    //  │  │  distinguish vaults for different coins. This    │      │
+    //  │  │  means:                                          │      │
+    //  │  │   - No constraints on T (no abilities needed)    │      │
+    //  │  │   - The compiler doesn't need the source of T    │      │
+    //  │   - The frontend passes T as a string at PTB time │      │
+    //  │  └────────────────────────────────────────────────┘      │
+    //  │                                                            │
+    //  │  For USDC on mainnet, the frontend would pass              │
+    //  │  typeArguments: ["0xdba3...::usdc::USDC"]                  │
+    //  │                                                            │
+    //  │  ┌─ How the frontend builds the PTB ───────────────┐       │
+    //  │  │  tx.moveCall({                                   │       │
+    //  │  │    target: "pkg::yield_scallop::deposit_generic",│       │
+    //  │  │    typeArguments: [USDC_COIN_TYPE_STRING],       │       │
+    //  │  │    arguments: [vault, coin, version, market,     │       │
+    //  │  │                clock],                           │       │
+    //  │  │  });                                             │       │
+    //  │  └──────────────────────────────────────────────────┘       │
+    //  └────────────────────────────────────────────────────────────┘
+    // ═══════════════════════════════════════════════════════════════
+
+    // ┌──────────────────────────────────────────────────────────┐
+    // │ GENERIC VAULT STRUCT                                     │
+    // │                                                          │
+    // │ `phantom T` = any coin type (SUI, USDC, USDT, ...).     │
+    // │ The `scoin_balance` holds MarketCoin<T>, which changes   │
+    // │ per T. This is a DIFFERENT type from ScallopYieldVault   │
+    // │ (which is concrete). Existing SUI vault objects are NOT  │
+    // │ affected by this new struct.                             │
+    // └──────────────────────────────────────────────────────────┘
+
+    /// Shared vault holding sCoin (MarketCoin<T>) for an arbitrary
+    /// coin type T. Used for USDC, USDT, etc.
+    ///
+    /// `phantom T` means T is never stored or accessed — it just
+    /// provides type-level routing so Scallop's market knows which
+    /// pool to use.
+    public struct ScallopYieldVaultGeneric<phantom T> has key {
+        id: UID,
+        /// Balance of sCoin (MarketCoin<T>) held in the vault.
+        scoin_balance: Balance<MarketCoin<T>>,
+        /// Registry of all active yield positions.
+        positions: Table<ID, PositionRecord>,
+    }
+
+    // ┌──────────────────────────────────────────────────────────┐
+    // │ init_vault_generic()                                      │
+    // │                                                          │
+    // │ Creates a shared ScallopYieldVaultGeneric<T> for any T.  │
+    // │ The frontend calls this once per coin type with the      │
+    // │ appropriate type argument, then captures the vault ID.   │
+    // │                                                          │
+    // │ Call once per coin at deploy time:                       │
+    // │   - typeArguments: ["0xdba3...::usdc::USDC"]             │
+    // │   - captures vault ID → stored in constants.ts           │
+    // └──────────────────────────────────────────────────────────┘
+
+    /// Create a new generic yield vault for coin type T.
+    ///
+    /// Call this once per coin via PTB, passing the coin type as
+    /// a type argument. The returned object ID is the vault address
+    /// used in all subsequent create/claim PTBs for that coin.
+    public fun init_vault_generic<T>(ctx: &mut TxContext) {
+        let vault = ScallopYieldVaultGeneric<T> {
+            id: object::new(ctx),
+            scoin_balance: balance::zero<MarketCoin<T>>(),
+            positions: table::new(ctx),
+        };
+        transfer::share_object(vault);
+    }
+
+    // ┌──────────────────────────────────────────────────────────┐
+    // │ deposit_generic<T>()                                      │
+    // │                                                          │
+    // │ ONE function for ALL coin types. The type parameter T    │
+    // │ determines which Scallop pool the deposit routes to.     │
+    // │                                                          │
+    // │ Compare to deposit_scallop() (line 93) which is          │
+    // │ hard-coded to <SUI>. This version works for ANY T.       │
+    // └──────────────────────────────────────────────────────────┘
+
+    /// Deposit any coin into Scallop's lending pool.
+    ///
+    /// Generic version of `deposit_scallop` that works with any
+    /// coin type T. The frontend specifies T as a type argument
+    /// in the PTB — no compile-time import needed.
+    public fun deposit_generic<T>(
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        coin: Coin<T>,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ): ID {
+        let amount = coin.value();
+        let s_coin = mint::mint<T>(version, market, coin, clock, ctx);
+        let scoin_amount = s_coin.value();
+        balance::join(&mut vault.scoin_balance, coin::into_balance(s_coin));
+
+        let uid = object::new(ctx);
+        let position_id = uid.to_inner();
+        object::delete(uid);
+        table::add(
+            &mut vault.positions,
+            position_id,
+            PositionRecord {
+                principal: amount,
+                scoin_amount,
+                protocol: PROTOCOL_SCALLOP,
+            },
+        );
+
+        event::emit(ScallopDepositEvent {
+            position_id,
+            amount,
+            scoin_amount,
+        });
+
+        position_id
+    }
+
+    // ┌──────────────────────────────────────────────────────────┐
+    // │ withdraw_generic<T>()                                     │
+    // │                                                          │
+    // │ Generic version of withdraw_scallop(). Returns Coin<T>.   │
+    // │ T must match the coin type used at deposit time.         │
+    // └──────────────────────────────────────────────────────────┘
+
+    /// Withdraw any coin + yield from Scallop's lending pool.
+    ///
+    /// Generic version of `withdraw_scallop` that works with any
+    /// coin type T. The caller must pass a position_id from a
+    /// previous deposit_generic call with the same T.
+    public fun withdraw_generic<T>(
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        position_id: ID,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ): Coin<T> {
+        let PositionRecord { principal, scoin_amount, protocol: _ } =
+            table::remove(&mut vault.positions, position_id);
+
+        let s_coin = coin::take(&mut vault.scoin_balance, scoin_amount, ctx);
+        let coin = redeem::redeem<T>(version, market, s_coin, clock, ctx);
+        let total_value = coin.value();
+        let interest = total_value - principal;
+
+        event::emit(ScallopWithdrawEvent {
+            position_id,
+            principal,
+            interest,
+            total: total_value,
+        });
+
+        coin
+    }
+
+    // ┌──────────────────────────────────────────────────────────┐
+    // │ READ-ONLY QUERIES (generic versions)                     │
+    // │                                                          │
+    // │ These mirror the SUI-specific query functions above but  │
+    // │ work with the generic vault type. Same logic, just       │
+    // │ generic over T.                                          │
+    // └──────────────────────────────────────────────────────────┘
+
+    public fun get_principal_generic<T>(vault: &ScallopYieldVaultGeneric<T>, position_id: ID): u64 {
+        if (table::contains(&vault.positions, position_id)) {
+            table::borrow(&vault.positions, position_id).principal
+        } else {
+            0
+        }
+    }
+
+    public fun active_position_count_generic<T>(vault: &ScallopYieldVaultGeneric<T>): u64 {
+        table::length(&vault.positions)
+    }
+
+    public fun total_scoin_balance_generic<T>(vault: &ScallopYieldVaultGeneric<T>): u64 {
+        balance::value(&vault.scoin_balance)
+    }
 }

@@ -69,9 +69,7 @@ export default function ConnectModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-display text-lg font-bold mb-1">Connect</h2>
-        <p className="text-text-muted text-sm mb-5">
-          Choose how to connect
-        </p>
+        <p className="text-text-muted text-sm mb-5">Choose how to connect</p>
 
         <div className="space-y-3">
           <button

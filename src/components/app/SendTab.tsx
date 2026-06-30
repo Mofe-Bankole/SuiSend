@@ -6,10 +6,21 @@ import {
   useSuiClientQuery,
   useSignAndExecuteTransaction,
 } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
 import { motion, AnimatePresence } from "framer-motion";
-import { buildCreatePaymentScallopPTB, randomHashHex } from "@/lib/suisend";
-import { getScallopApy } from "@/lib/scallop";
-import { mistToSui, suiToMist, shortenAddress } from "@/lib/constants";
+import {
+  buildCreatePaymentScallopPTB,
+  buildCreatePaymentUSDCPTB,
+  randomHashHex,
+} from "@/lib/suisend";
+import { getScallopApy, getScallopUsdcApy } from "@/lib/scallop";
+import {
+  mistToSui,
+  suiToMist,
+  USDC_COIN_TYPE,
+  mistToUsdc,
+  usdcToMist,
+} from "@/lib/constants";
 import { storeText, blobIdToHex } from "@/lib/walrus";
 import { getAppUrl } from "@/lib/url";
 import { getZkLoginState, signWithZkLoginAndExecute, type ZkLoginState } from "@/lib/zklogin";
@@ -34,10 +45,21 @@ export default function SendTab({
   const { data: balance } = useSuiClientQuery("getBalance", {
     owner: account?.address ?? "",
   });
+  const { data: usdcBalanceData } = useSuiClientQuery("getBalance", {
+    owner: account?.address ?? "",
+    coinType: USDC_COIN_TYPE,
+  });
+  const { data: usdcCoinsData } = useSuiClientQuery("getCoins", {
+    owner: account?.address ?? "",
+    coinType: USDC_COIN_TYPE,
+    limit: 10,
+  });
 
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [selectedCoin, setSelectedCoin] = useState<"SUI" | "USDC">("SUI");
   const [apy, setApy] = useState(8.2);
+  const [usdcApy, setUsdcApy] = useState(5.0);
   const [linkShown, setLinkShown] = useState(false);
   const [copied, setCopied] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState("");
@@ -46,6 +68,7 @@ export default function SendTab({
   const [walrusUploading, setWalrusUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const [zkBalance, setZkBalance] = useState<number | null>(null);
+  const [zkUsdcBalance, setZkUsdcBalance] = useState<number | null>(null);
   const [zkState, setZkState] = useState<ZkLoginState | null>(null);
   const linkRef = useRef<HTMLDivElement>(null);
 
@@ -59,15 +82,26 @@ export default function SendTab({
         .getBalance({ owner: zkState.address })
         .then((b) => setZkBalance(mistToSui(BigInt(b.totalBalance))))
         .catch(() => setZkBalance(0));
+      suiClient
+        .getBalance({ owner: zkState.address, coinType: USDC_COIN_TYPE })
+        .then((b) => setZkUsdcBalance(mistToUsdc(BigInt(b.totalBalance))))
+        .catch(() => setZkUsdcBalance(0));
     } else {
       setZkBalance(null);
+      setZkUsdcBalance(null);
     }
   }, [zkState?.isReady, zkState?.address, account, suiClient]);
 
   useEffect(() => {
     let cancelled = false;
-    getScallopApy(suiClient).then((val) => {
-      if (!cancelled) setApy(val);
+    Promise.all([
+      getScallopApy(suiClient),
+      getScallopUsdcApy(suiClient),
+    ]).then(([suiApy, usdcApyVal]) => {
+      if (!cancelled) {
+        setApy(suiApy);
+        setUsdcApy(usdcApyVal);
+      }
     });
     return () => {
       cancelled = true;
@@ -75,7 +109,8 @@ export default function SendTab({
   }, [suiClient]);
 
   const rawAmount = parseFloat(amount) || 0;
-  const apyBps = Math.round(apy * 100);
+  const activeApy = selectedCoin === "SUI" ? apy : usdcApy;
+  const apyBps = Math.round(activeApy * 100);
   const weeklyYield = calcYield(rawAmount, apyBps, 7 * DAY_MS);
 
   useEffect(() => {
@@ -142,13 +177,35 @@ export default function SendTab({
       }
 
       const linkHash = randomHashHex();
-      const amountMist = suiToMist(rawAmount);
 
-      const tx = buildCreatePaymentScallopPTB({
-        amount: amountMist,
-        linkHashHex: linkHash,
-        noteBlobIdHex,
-      });
+      let tx: Transaction;
+      if (selectedCoin === "SUI") {
+        const amountMist = suiToMist(rawAmount);
+        tx = buildCreatePaymentScallopPTB({
+          amount: amountMist,
+          linkHashHex: linkHash,
+          noteBlobIdHex,
+        });
+      } else {
+        const amountUsdc = usdcToMist(rawAmount);
+        const coins = usdcCoinsData?.data?.filter(
+          (c) => BigInt(c.balance) >= amountUsdc,
+        );
+        if (!coins || coins.length === 0) {
+          setTxPhase({
+            status: "failed",
+            error: "No USDC coin with sufficient balance found.",
+          });
+          setSending(false);
+          return;
+        }
+        tx = buildCreatePaymentUSDCPTB({
+          amount: amountUsdc,
+          linkHashHex: linkHash,
+          noteBlobIdHex,
+          coinObjectId: coins[0].coinObjectId,
+        });
+      }
 
       setTxPhase({ status: "signing" });
 
@@ -196,8 +253,11 @@ export default function SendTab({
       : generatedUrl
     : "";
 
-  const suiBalance = balance ? mistToSui(BigInt(balance.totalBalance)) : (zkBalance ?? 0);
-  const activeBalance = account ? (balance ? mistToSui(BigInt(balance.totalBalance)) : 0) : (zkBalance ?? 0);
+  const suiBalanceNum = balance ? mistToSui(BigInt(balance.totalBalance)) : (zkBalance ?? 0);
+  const usdcBalanceNum = usdcBalanceData
+    ? mistToUsdc(BigInt(usdcBalanceData.totalBalance))
+    : (zkUsdcBalance ?? 0);
+  const activeBalance = selectedCoin === "SUI" ? suiBalanceNum : usdcBalanceNum;
   const canSend = rawAmount > 0 && rawAmount <= activeBalance;
 
   if (!account && !zkState?.isReady) {
@@ -223,7 +283,7 @@ export default function SendTab({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="font-display text-xl font-bold tracking-tight">
             Send money
@@ -239,15 +299,39 @@ export default function SendTab({
           <div className="font-display text-[15px] font-semibold tabular-nums">
             {activeBalance.toLocaleString(undefined, {
               minimumFractionDigits: 2,
-              maximumFractionDigits: 4,
+              maximumFractionDigits: selectedCoin === "SUI" ? 4 : 2,
             })}{" "}
-            <span className="text-text-secondary text-[13px]">SUI</span>
+            <span className="text-text-secondary text-[13px]">
+              {selectedCoin}
+            </span>
           </div>
         </div>
       </div>
 
+      <div className="flex bg-bg-card rounded-xl p-0.5 border border-border-light mb-5">
+        {(["SUI", "USDC"] as const).map((coin) => (
+          <button
+            key={coin}
+            onClick={() => {
+              setSelectedCoin(coin);
+              if (linkShown) {
+                setLinkShown(false);
+                setCopied(false);
+              }
+            }}
+            className={`flex-1 py-2 rounded-[10px] text-sm font-display font-semibold transition-all ${
+              selectedCoin === coin
+                ? "bg-accent text-background shadow-sm"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            {coin}
+          </button>
+        ))}
+      </div>
+
       <div className="app-field">
-        <div className="app-flabel">Amount (SUI)</div>
+        <div className="app-flabel">Amount ({selectedCoin})</div>
         <div className="relative">
           <input
             className="app-finput !text-[28px] !font-bold !tracking-tight !pl-4 !pr-14 !py-4"
@@ -258,7 +342,7 @@ export default function SendTab({
             placeholder="0.00"
           />
           <div className="absolute right-[14px] top-1/2 -translate-y-1/2 text-text-muted font-display text-[13px] font-semibold pointer-events-none">
-            SUI
+            {selectedCoin}
           </div>
         </div>
       </div>
@@ -274,7 +358,7 @@ export default function SendTab({
                 : "bg-bg-card border border-border-light text-text-secondary hover:border-text-muted"
             }`}
           >
-            {val} SUI
+            {val} {selectedCoin}
           </button>
         ))}
       </div>
@@ -299,12 +383,12 @@ export default function SendTab({
         <div className="ybp-row">
           <span className="ybp-label">Estimated yield in 7 days</span>
           <span className="ybp-value">
-            {rawAmount > 0 ? <>+{formatYield(animatingYield)} SUI</> : "—"}
+            {rawAmount > 0 ? <>+{formatYield(animatingYield)} {selectedCoin}</> : "—"}
           </span>
         </div>
         <div className="ybp-sub">
-          Based on real Scallop APY:{" "}
-          <span className="text-accent font-semibold">{apy.toFixed(2)}%</span>
+          Based on real Scallop {selectedCoin} APY:{" "}
+          <span className="text-accent font-semibold">{activeApy.toFixed(2)}%</span>
         </div>
       </div>
 
@@ -346,6 +430,30 @@ export default function SendTab({
               >
                 {displayUrl}
               </div>
+              <button
+                className="lgp-open"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(generatedUrl, "_blank");
+                }}
+                aria-label="Open link"
+                title="Open claim link"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </button>
               <button
                 className={`lgp-copy ${copied ? "copied" : ""}`}
                 onClick={handleCopy}
