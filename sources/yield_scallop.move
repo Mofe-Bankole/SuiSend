@@ -148,7 +148,7 @@ module suisend::yield_scallop {
         let s_sui = coin::take(&mut vault.scoin_balance, scoin_amount, ctx);
         let sui = redeem::redeem<SUI>(version, market, s_sui, clock, ctx);
         let total_value = sui.value();
-        let interest = total_value - principal;
+        let interest = if (total_value > principal) { total_value - principal } else { 0 };
 
         event::emit(ScallopWithdrawEvent {
             position_id,
@@ -338,7 +338,7 @@ module suisend::yield_scallop {
         let s_coin = coin::take(&mut vault.scoin_balance, scoin_amount, ctx);
         let coin = redeem::redeem<T>(version, market, s_coin, clock, ctx);
         let total_value = coin.value();
-        let interest = total_value - principal;
+        let interest = if (total_value > principal) { total_value - principal } else { 0 };
 
         event::emit(ScallopWithdrawEvent {
             position_id,

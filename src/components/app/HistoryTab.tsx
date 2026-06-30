@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { queryUserSentPayments, queryUserClaimReceipts } from "@/lib/suisend";
 import { useNow, timeAgo, timeUntil } from "@/hooks/useNow";
 import type { PaymentLink, PaymentStatus, ClaimRecord } from "@/lib/suisend";
+import { coinLabel } from "@/lib/constants";
 
 const statusDot: Record<string, string> = {
   pending: "var(--accent)",
@@ -92,7 +93,8 @@ export default function HistoryTab() {
         linkHash: c.linkHash,
         sender: c.claimer,
         amount: c.amount,
-        numericAmount: parseFloat(c.amount) || 0,
+        numericAmount: 0,
+        coinType: c.coinType,
         note: "",
         status: "claimed" as PaymentStatus,
         yieldEarned: c.yieldEarned,
@@ -190,6 +192,9 @@ export default function HistoryTab() {
                         </span>
                         <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[rgba(158,255,91,0.12)] text-accent">
                           {item.type === "received" ? "Received" : "Sent"}
+                        </span>
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.06)] text-text-muted">
+                          {coinLabel(item.data.coinType)}
                         </span>
                       </div>
                       <div className="text-[11px] text-text-muted mt-1.5">
@@ -329,8 +334,7 @@ export default function HistoryTab() {
                   )}
 
                   {item.data.yieldEarned &&
-                    item.data.yieldEarned !== "0" &&
-                    item.data.yieldEarned !== "0 SUI" && (
+                    item.data.yieldEarned !== "0" && (
                       <div className="history-yield">
                         +{item.data.yieldEarned}
                       </div>

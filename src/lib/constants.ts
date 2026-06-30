@@ -1,7 +1,7 @@
 "use client";
 
 export const SUISEND_PACKAGE_ID =
-  "0x837811a8e28aab9c0d5ca9b369aa1da1e178de3e4c1a1c6f33dbf025738ee852";
+  "0x15e985c9c82b8d4ed5d171b2bc6703aa78507c9cc1473ae6c0daf8b54625adcb";
 export const PAYMENT_BOOK_ID =
   "0x4889941e6073c7e3bebc602c1a09ebc014c64a2b9137569a20100ece0219bafd";
 export const YIELD_VAULT_ID =
@@ -58,6 +58,25 @@ export function mistToUsdc(mist: bigint): number {
 
 export function usdcToMist(usdc: number): bigint {
   return BigInt(Math.round(usdc * USDC_PER_UNIT));
+}
+
+export function mistToUnits(amount: number, coinType: number): number {
+  const divisor = coinType === COIN_TYPE_USDC ? USDC_PER_UNIT : SUI_PER_MIST;
+  return amount / divisor;
+}
+
+export function formatAmount(amount: number, coinType: number): string {
+  const divisor = coinType === COIN_TYPE_USDC ? USDC_PER_UNIT : SUI_PER_MIST;
+  const ticker = coinType === COIN_TYPE_USDC ? "USDC" : "SUI";
+  const val = amount / divisor;
+  if (val >= 1000) return val.toFixed(0) + " " + ticker;
+  if (val >= 1) return val.toFixed(2) + " " + ticker;
+  if (val >= 0.01) return val.toFixed(4) + " " + ticker;
+  return val.toFixed(6) + " " + ticker;
+}
+
+export function coinLabel(coinType: number): string {
+  return coinType === COIN_TYPE_USDC ? "USDC" : "SUI";
 }
 
 export function shortenAddress(addr: string, chars = 4): string {

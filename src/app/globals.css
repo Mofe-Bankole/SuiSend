@@ -1580,6 +1580,44 @@ html {
     color: var(--bg);
 }
 
+/* Stats banner */
+.stats-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-radius: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+}
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.stat-value {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+.stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+.stat-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
+}
+
 /* Empty state */
 .empty-state {
     display: flex;

@@ -16,7 +16,8 @@ import SendTab from "@/components/app/SendTab";
 import ClaimTab from "@/components/app/ClaimTab";
 import HistoryTab from "@/components/app/HistoryTab";
 import TxStatusOverlay, { type TxPhase } from "@/components/app/TxStatusOverlay";
-import { mistToSui } from "@/lib/constants";
+import { mistToSui, formatAmount, COIN_TYPE_SUI } from "@/lib/constants";
+import { queryPaymentStats, type PaymentStats } from "@/lib/suisend";
 
 const tabs = [
   { key: "send", label: "Send", icon: "→" },
@@ -41,10 +42,17 @@ export default function AppPage() {
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [zkState, setZkState] = useState<ReturnType<typeof getZkLoginState>>(null);
+  const [stats, setStats] = useState<PaymentStats | null>(null);
 
   useEffect(() => {
     setZkState(getZkLoginState());
   }, []);
+
+  useEffect(() => {
+    queryPaymentStats(suiClient)
+      .then(setStats)
+      .catch(() => {});
+  }, [suiClient]);
 
   const isConnected = !!(account || zkState?.isReady);
   const connectedLabel = account
@@ -124,6 +132,22 @@ export default function AppPage() {
         open={showWalletModal}
         onOpenChange={setShowWalletModal}
       />
+
+      {stats && stats.totalPayments > 0 && (
+        <div className="mx-auto w-full max-w-[560px] px-4 md:px-6 pt-4">
+          <div className="stats-banner">
+            <div className="stat-item">
+              <span className="stat-value">{stats.totalPayments.toLocaleString()}</span>
+              <span className="stat-label">payments created</span>
+            </div>
+            <div className="stat-divider" />
+            <div className="stat-item">
+              <span className="stat-value">{formatAmount(stats.totalVolumeMist, COIN_TYPE_SUI)}</span>
+              <span className="stat-label">total volume</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 mx-auto w-full max-w-[560px] px-4 md:px-6 py-6 md:py-10 app-main">
         <AnimatePresence mode="wait">

@@ -7,7 +7,8 @@ import {
   useSignAndExecuteTransaction,
 } from "@mysten/dapp-kit";
 import { motion, AnimatePresence } from "framer-motion";
-import { lookupPayment, buildClaimPaymentScallopPTB } from "@/lib/suisend";
+import { lookupPayment, buildClaimPaymentScallopPTB, buildClaimPaymentUSDCPTB } from "@/lib/suisend";
+import { formatAmount, coinLabel } from "@/lib/constants";
 import { getScallopApy } from "@/lib/scallop";
 import { useNow, timeUntil } from "@/hooks/useNow";
 import { getZkLoginState, signWithZkLoginAndExecute, type ZkLoginState } from "@/lib/zklogin";
@@ -38,6 +39,7 @@ export default function ClaimTab({
     expiry: bigint;
     state: number;
     sender: string;
+    coinType: number;
   } | null>(null);
 
   const [zkState, setZkState] = useState<ZkLoginState | null>(null);
@@ -88,6 +90,7 @@ export default function ClaimTab({
           expiry: result.expiry,
           state: result.state,
           sender: result.sender,
+          coinType: result.coinType ?? 0,
         });
         setSearched(true);
       } else {
@@ -109,7 +112,9 @@ export default function ClaimTab({
     if (!paymentInfo) return;
 
     try {
-      const tx = buildClaimPaymentScallopPTB(paymentInfo.linkHash);
+      const tx = paymentInfo.coinType === 1
+        ? buildClaimPaymentUSDCPTB(paymentInfo.linkHash)
+        : buildClaimPaymentScallopPTB(paymentInfo.linkHash);
 
       if (account) {
         setTxPhase({ status: "signing" });
@@ -211,7 +216,10 @@ export default function ClaimTab({
                     Payment found
                   </div>
                   <div className="font-display text-2xl font-bold tracking-tight">
-                    {`${(Number(paymentInfo.amount) / 1e9).toFixed(2)} SUI`}
+                    {formatAmount(Number(paymentInfo.amount), paymentInfo.coinType)}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted font-medium mt-0.5">
+                    {coinLabel(paymentInfo.coinType)}
                   </div>
                 </div>
                 <div className="text-right">

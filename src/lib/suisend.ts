@@ -13,6 +13,9 @@ import {
   EXPIRY_DAYS,
   COIN_TYPE_USDC,
   USDC_COIN_TYPE,
+  formatAmount,
+  mistToUnits,
+  coinLabel,
 } from "./constants";
 import { getAppUrl } from "./url";
 
@@ -24,6 +27,7 @@ export interface PaymentLink {
   sender: string;
   amount: string;
   numericAmount: number;
+  coinType: number;
   note: string;
   status: PaymentStatus;
   yieldEarned: string;
@@ -41,6 +45,7 @@ export interface ClaimRecord {
   amount: string;
   yieldEarned: string;
   claimedAt: number;
+  coinType: number;
 }
 
 const CLOCK_ID =
@@ -113,6 +118,7 @@ export interface PaymentLookup {
   expiry?: bigint;
   state?: number;
   sender?: string;
+  coinType?: number;
 }
 
 function decodeBool(bytes: Uint8Array): boolean {
@@ -176,6 +182,13 @@ export async function lookupPayment(
       tx.pure.vector("u8", Array.from(linkHashBytes)),
     ],
   });
+  tx.moveCall({
+    target: `${SUISEND_PACKAGE_ID}::core::payment_coin_type`,
+    arguments: [
+      tx.object(PAYMENT_BOOK_ID),
+      tx.pure.vector("u8", Array.from(linkHashBytes)),
+    ],
+  });
 
   try {
     const result = await suiClient.devInspectTransactionBlock({
@@ -194,6 +207,7 @@ export async function lookupPayment(
     const bytes2 = result.results[2]?.returnValues?.[0]?.[0];
     const bytes3 = result.results[3]?.returnValues?.[0]?.[0];
     const bytes4 = result.results[4]?.returnValues?.[0]?.[0];
+    const bytes5 = result.results[5]?.returnValues?.[0]?.[0];
 
     return {
       exists: true,
@@ -201,6 +215,7 @@ export async function lookupPayment(
       expiry: bytes2 ? decodeU64(new Uint8Array(bytes2)) : undefined,
       state: bytes3 ? decodeU8(new Uint8Array(bytes3)) : undefined,
       sender: bytes4 ? decodeAddress(new Uint8Array(bytes4)) : undefined,
+      coinType: bytes5 ? decodeU8(new Uint8Array(bytes5)) : undefined,
     };
   } catch (e) {
     console.error("lookupPayment error:", e);
@@ -261,6 +276,46 @@ async function batchCheckPaymentStates(
   return map;
 }
 
+async function batchCheckPaymentCoinTypes(
+  suiClient: SuiJsonRpcClient,
+  linkHashes: string[],
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (linkHashes.length === 0) return map;
+
+  const dummySender =
+    "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+  const tx = new Transaction();
+  for (const hash of linkHashes) {
+    const bytes = fromHex(hash.replace("0x", ""));
+    tx.moveCall({
+      target: `${SUISEND_PACKAGE_ID}::core::payment_coin_type`,
+      arguments: [
+        tx.object(PAYMENT_BOOK_ID),
+        tx.pure.vector("u8", Array.from(bytes)),
+      ],
+    });
+  }
+
+  try {
+    const result = await suiClient.devInspectTransactionBlock({
+      transactionBlock: tx,
+      sender: dummySender,
+    });
+    if (!result.results) return map;
+
+    for (let i = 0; i < linkHashes.length; i++) {
+      const bytes = result.results[i]?.returnValues?.[0]?.[0];
+      map.set(linkHashes[i], bytes ? decodeU8(new Uint8Array(bytes)) : 0);
+    }
+  } catch (e) {
+    console.warn("batchCheckPaymentCoinTypes error:", e);
+  }
+
+  return map;
+}
+
 export function buildCreatePaymentGenericPTB(params: {
   amount: bigint;
   linkHashHex: string;
@@ -311,7 +366,6 @@ export function buildClaimPaymentGenericPTB(params: {
   linkHashHex: string;
   vaultId: string;
   coinType: string;
-  coinTypeId: number;
 }): Transaction {
   const tx = new Transaction();
   tx.setGasBudgetIfNotSet(BigInt(20000000));
@@ -325,7 +379,6 @@ export function buildClaimPaymentGenericPTB(params: {
         "u8",
         Array.from(fromHex(params.linkHashHex.replace("0x", ""))),
       ),
-      tx.pure.u8(params.coinTypeId),
       tx.object(SCALLOP_VERSION_ID),
       tx.object(SCALLOP_MARKET_ID),
       tx.object(CLOCK_ID),
@@ -354,7 +407,6 @@ export function buildClaimPaymentUSDCPTB(linkHashHex: string): Transaction {
     linkHashHex,
     vaultId: SCALLOP_YIELD_VAULT_USDC_ID,
     coinType: USDC_COIN_TYPE,
-    coinTypeId: COIN_TYPE_USDC,
   });
 }
 
@@ -410,10 +462,12 @@ export async function queryUserSentPayments(
     console.warn("query sent: failed to fetch claimed events", e);
   }
 
-  const stateMap = await batchCheckPaymentStates(
-    suiClient,
-    rawPayments.map((p) => p.linkHash),
-  );
+  const linkHashes = rawPayments.map((p) => p.linkHash);
+
+  const [stateMap, coinTypeMap] = await Promise.all([
+    batchCheckPaymentStates(suiClient, linkHashes),
+    batchCheckPaymentCoinTypes(suiClient, linkHashes),
+  ]);
 
   const PAYMENT_STATE: Record<number, PaymentStatus> = {
     0: "pending",
@@ -426,6 +480,7 @@ export async function queryUserSentPayments(
     const amount = Number(parsed.amount ?? 0);
     const createdAt = Number(parsed.created_at ?? 0);
     const expiry = Number(parsed.expiry ?? 0);
+    const coinType = coinTypeMap.get(linkHash) ?? 0;
 
     const checked = stateMap.get(linkHash);
     let status: PaymentStatus;
@@ -439,8 +494,9 @@ export async function queryUserSentPayments(
       id: e.id.txDigest,
       linkHash,
       sender: (parsed.sender as string) ?? "",
-      amount: formatSui(amount),
-      numericAmount: amount / 1e9,
+      amount: formatAmount(amount, coinType),
+      numericAmount: mistToUnits(amount, coinType),
+      coinType,
       note: "",
       status,
       yieldEarned: "0",
@@ -463,6 +519,8 @@ export async function queryUserClaimReceipts(
   });
 
   const claims: ClaimRecord[] = [];
+  const linkHashes: string[] = [];
+
   for (const obj of objects.data) {
     if (!obj.data?.objectId) continue;
     const receipt = await suiClient.getObject({
@@ -476,24 +534,65 @@ export async function queryUserClaimReceipts(
     const linkHash = Array.isArray(rawLinkHash)
       ? "0x" + toHex(new Uint8Array(rawLinkHash as number[]))
       : (rawLinkHash as string) || "";
+    linkHashes.push(linkHash);
     claims.push({
       id: obj.data.objectId,
       linkHash,
       claimer: (fields.recipient as string) ?? "",
-      amount: formatSui(Number(fields.total_claimed ?? 0)),
-      yieldEarned: formatSui(Number(fields.yield_earned ?? 0)),
+      amount: String(fields.total_claimed ?? 0),
+      yieldEarned: String(fields.yield_earned ?? 0),
       claimedAt: Number(fields.claimed_at ?? 0),
+      coinType: 0,
     });
   }
+
+  const coinTypeMap = await batchCheckPaymentCoinTypes(suiClient, linkHashes);
+
+  for (const claim of claims) {
+    const coinType = coinTypeMap.get(claim.linkHash) ?? 0;
+    claim.coinType = coinType;
+    claim.amount = formatAmount(Number(claim.amount), coinType);
+    claim.yieldEarned = formatAmount(Number(claim.yieldEarned), coinType);
+  }
+
   return claims;
 }
 
-function formatSui(val: number): string {
-  const sui = val / 1e9;
-  if (sui >= 1000) return sui.toFixed(0) + " SUI";
-  if (sui >= 1) return sui.toFixed(2) + " SUI";
-  if (sui >= 0.01) return sui.toFixed(4) + " SUI";
-  return sui.toFixed(6) + " SUI";
+export interface PaymentStats {
+  totalPayments: number;
+  totalVolumeMist: number;
+}
+
+export async function queryPaymentStats(
+  suiClient: SuiJsonRpcClient,
+): Promise<PaymentStats> {
+  let totalPayments = 0;
+  let totalVolumeMist = 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let cursor: any = null;
+  let hasMore = true;
+
+  while (hasMore) {
+    const result = await suiClient.queryEvents({
+      query: {
+        MoveEventType: `${SUISEND_PACKAGE_ID}::core::PaymentCreatedEvent`,
+      },
+      limit: 100,
+      cursor: cursor ?? undefined,
+    });
+
+    for (const ev of result.data) {
+      const p = ev.parsedJson as Record<string, unknown> | null;
+      if (!p) continue;
+      totalPayments++;
+      totalVolumeMist += Number(p.amount ?? 0);
+    }
+
+    cursor = result.nextCursor ?? null;
+    hasMore = result.hasNextPage;
+  }
+
+  return { totalPayments, totalVolumeMist };
 }
 
 export function formatYield(val: number): string {
