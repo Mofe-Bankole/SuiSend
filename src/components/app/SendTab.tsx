@@ -23,7 +23,11 @@ import {
 } from "@/lib/constants";
 import { storeText, blobIdToHex } from "@/lib/walrus";
 import { getAppUrl } from "@/lib/url";
-import { getZkLoginState, signWithZkLoginAndExecute, type ZkLoginState } from "@/lib/zklogin";
+import {
+  getZkLoginState,
+  signWithZkLoginAndExecute,
+  type ZkLoginState,
+} from "@/lib/zklogin";
 import type { TxPhase } from "./TxStatusOverlay";
 
 const DAY_MS = 86400000;
@@ -32,7 +36,7 @@ function calcYield(amount: number, apyBps: number, elapsedMs: number): number {
   return (amount * apyBps * elapsedMs) / (365 * DAY_MS) / 10000;
 }
 
-const PRESETS = [10, 25, 35, 50, 100, 500];
+const PRESETS = [10, 25, 50, 100, 500];
 
 export default function SendTab({
   setTxPhase,
@@ -94,15 +98,14 @@ export default function SendTab({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      getScallopApy(suiClient),
-      getScallopUsdcApy(suiClient),
-    ]).then(([suiApy, usdcApyVal]) => {
-      if (!cancelled) {
-        setApy(suiApy);
-        setUsdcApy(usdcApyVal);
-      }
-    });
+    Promise.all([getScallopApy(suiClient), getScallopUsdcApy(suiClient)]).then(
+      ([suiApy, usdcApyVal]) => {
+        if (!cancelled) {
+          setApy(suiApy);
+          setUsdcApy(usdcApyVal);
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -253,7 +256,9 @@ export default function SendTab({
       : generatedUrl
     : "";
 
-  const suiBalanceNum = balance ? mistToSui(BigInt(balance.totalBalance)) : (zkBalance ?? 0);
+  const suiBalanceNum = balance
+    ? mistToSui(BigInt(balance.totalBalance))
+    : (zkBalance ?? 0);
   const usdcBalanceNum = usdcBalanceData
     ? mistToUsdc(BigInt(usdcBalanceData.totalBalance))
     : (zkUsdcBalance ?? 0);
@@ -383,12 +388,20 @@ export default function SendTab({
         <div className="ybp-row">
           <span className="ybp-label">Estimated yield in 7 days</span>
           <span className="ybp-value">
-            {rawAmount > 0 ? <>+{formatYield(animatingYield)} {selectedCoin}</> : "—"}
+            {rawAmount > 0 ? (
+              <>
+                +{formatYield(animatingYield)} {selectedCoin}
+              </>
+            ) : (
+              "—"
+            )}
           </span>
         </div>
         <div className="ybp-sub">
           Based on real Scallop {selectedCoin} APY:{" "}
-          <span className="text-accent font-semibold">{activeApy.toFixed(2)}%</span>
+          <span className="text-accent font-semibold">
+            {activeApy.toFixed(2)}%
+          </span>
         </div>
       </div>
 

@@ -430,7 +430,7 @@ module suisend::core {
         let record = table::remove(&mut book.payments, link_hash);
 
         // Verify the payment is still active (not already claimed/refunded).
-        assert!(record.state == STATE_ACTIVE, EWrongState);
+        assert!(record.state == STATE_ACTIVE , EWrongState);
 
         // Record who is claiming — the transaction signer is the recipient.
         let recipient = tx_context::sender(ctx);

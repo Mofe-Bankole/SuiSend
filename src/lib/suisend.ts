@@ -5,6 +5,9 @@ import { fromHex, toHex, normalizeSuiAddress } from "@mysten/sui/utils";
 import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import {
   SUISEND_PACKAGE_ID,
+  SUISEND_PACKAGE_ID_V2,
+  SUISEND_ORIGINAL_PACKAGE_ID,
+  SUISEND_ALL_PACKAGE_IDS,
   PAYMENT_BOOK_ID,
   SCALLOP_YIELD_VAULT_ID,
   SCALLOP_YIELD_VAULT_USDC_ID,
@@ -410,16 +413,27 @@ export function buildClaimPaymentUSDCPTB(linkHashHex: string): Transaction {
   });
 }
 
+async function queryAllPaymentCreatedEvents(
+  suiClient: SuiJsonRpcClient,
+): Promise<{ data: { parsedJson: unknown; id: { txDigest: string } }[] }> {
+  const allData: { parsedJson: unknown; id: { txDigest: string } }[] = [];
+  for (const pkgId of SUISEND_ALL_PACKAGE_IDS) {
+    try {
+      const result = await suiClient.queryEvents({
+        query: { MoveEventType: `${pkgId}::core::PaymentCreatedEvent` },
+        limit: 50,
+      });
+      allData.push(...result.data);
+    } catch { /* skip packages that never emitted this event type */ }
+  }
+  return { data: allData };
+}
+
 export async function queryUserSentPayments(
   suiClient: SuiJsonRpcClient,
   address: string,
 ): Promise<PaymentLink[]> {
-  const eventResult = await suiClient.queryEvents({
-    query: {
-      MoveEventType: `${SUISEND_PACKAGE_ID}::core::PaymentCreatedEvent`,
-    },
-    limit: 50,
-  });
+  const eventResult = await queryAllPaymentCreatedEvents(suiClient);
 
   const rawPayments = eventResult.data
     .filter((e) => {
@@ -442,13 +456,17 @@ export async function queryUserSentPayments(
   const claimedAtMap = new Map<string, number>();
 
   try {
-    const claimedEvents = await suiClient.queryEvents({
-      query: {
-        MoveEventType: `${SUISEND_PACKAGE_ID}::core::PaymentClaimedEvent`,
-      },
-      limit: 50,
-    });
-    for (const ev of claimedEvents.data) {
+    const claimedAll: { parsedJson: unknown }[] = [];
+    for (const pkgId of SUISEND_ALL_PACKAGE_IDS) {
+      try {
+        const r = await suiClient.queryEvents({
+          query: { MoveEventType: `${pkgId}::core::PaymentClaimedEvent` },
+          limit: 50,
+        });
+        claimedAll.push(...r.data);
+      } catch {}
+    }
+    for (const ev of claimedAll) {
       const p = ev.parsedJson as Record<string, unknown> | null;
       if (!p) continue;
       const rawHash = p.link_hash;
@@ -508,15 +526,29 @@ export async function queryUserSentPayments(
   });
 }
 
+async function getAllClaimReceipts(
+  suiClient: SuiJsonRpcClient,
+  address: string,
+) {
+  const all: { data?: { objectId: string } | null }[] = [];
+  for (const pkgId of SUISEND_ALL_PACKAGE_IDS) {
+    try {
+      const result = await suiClient.getOwnedObjects({
+        owner: address,
+        filter: { StructType: `${pkgId}::core::ClaimReceipt` },
+        limit: 50,
+      });
+      all.push(...result.data);
+    } catch {}
+  }
+  return { data: all };
+}
+
 export async function queryUserClaimReceipts(
   suiClient: SuiJsonRpcClient,
   address: string,
 ): Promise<ClaimRecord[]> {
-  const objects = await suiClient.getOwnedObjects({
-    owner: address,
-    filter: { StructType: `${SUISEND_PACKAGE_ID}::core::ClaimReceipt` },
-    limit: 50,
-  });
+  const objects = await getAllClaimReceipts(suiClient, address);
 
   const claims: ClaimRecord[] = [];
   const linkHashes: string[] = [];
@@ -568,28 +600,30 @@ export async function queryPaymentStats(
 ): Promise<PaymentStats> {
   let totalPayments = 0;
   let totalVolumeMist = 0;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let cursor: any = null;
-  let hasMore = true;
 
-  while (hasMore) {
-    const result = await suiClient.queryEvents({
-      query: {
-        MoveEventType: `${SUISEND_PACKAGE_ID}::core::PaymentCreatedEvent`,
-      },
-      limit: 100,
-      cursor: cursor ?? undefined,
-    });
-
-    for (const ev of result.data) {
-      const p = ev.parsedJson as Record<string, unknown> | null;
-      if (!p) continue;
-      totalPayments++;
-      totalVolumeMist += Number(p.amount ?? 0);
+  for (const pkgId of SUISEND_ALL_PACKAGE_IDS) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let cursor: any = null;
+    let hasMore = true;
+    while (hasMore) {
+      try {
+        const result = await suiClient.queryEvents({
+          query: { MoveEventType: `${pkgId}::core::PaymentCreatedEvent` },
+          limit: 100,
+          cursor: cursor ?? undefined,
+        });
+        for (const ev of result.data) {
+          const p = ev.parsedJson as Record<string, unknown> | null;
+          if (!p) continue;
+          totalPayments++;
+          totalVolumeMist += Number(p.amount ?? 0);
+        }
+        cursor = result.nextCursor ?? null;
+        hasMore = result.hasNextPage;
+      } catch {
+        hasMore = false;
+      }
     }
-
-    cursor = result.nextCursor ?? null;
-    hasMore = result.hasNextPage;
   }
 
   return { totalPayments, totalVolumeMist };

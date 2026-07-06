@@ -36,8 +36,6 @@ module suisend::core_tests {
     const RECIPIENT: address = @0xC;
     const AGENT: address = @0xD;
 
-
-
     // ─── Test 1: Full create → claim lifecycle ─────────────────────────────
 
     #[test]

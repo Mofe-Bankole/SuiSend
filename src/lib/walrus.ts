@@ -1,7 +1,9 @@
 "use client";
 
-export const TESTNET_PUBLISHER = "https://publisher.walrus-testnet.walrus.space";
-export const TESTNET_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
+export const TESTNET_PUBLISHER =
+  "https://publisher.walrus-testnet.walrus.space";
+export const TESTNET_AGGREGATOR =
+  "https://aggregator.walrus-testnet.walrus.space";
 
 export const MAINNET_PUBLISHER = "https://publisher.walrus.space";
 export const MAINNET_AGGREGATOR = "https://aggregator.walrus.space";
@@ -16,7 +18,9 @@ export interface WalrusEndpointConfig {
   aggregator: string;
 }
 
-export function getWalrusConfig(network: "testnet" | "mainnet" = "mainnet"): WalrusEndpointConfig {
+export function getWalrusConfig(
+  network: "testnet" | "mainnet" = "mainnet",
+): WalrusEndpointConfig {
   return {
     publisher: network === "testnet" ? TESTNET_PUBLISHER : MAINNET_PUBLISHER,
     aggregator: network === "testnet" ? TESTNET_AGGREGATOR : MAINNET_AGGREGATOR,
@@ -39,8 +43,7 @@ export async function storeBlob(
 
   const json = await resp.json();
   const blobId =
-    json.newlyCreated?.blobObject?.blobId ??
-    json.alreadyCertified?.blobId;
+    json.newlyCreated?.blobObject?.blobId ?? json.alreadyCertified?.blobId;
 
   if (!blobId) throw new Error("walrus store: no blobId in response");
 
@@ -99,5 +102,8 @@ export function hexToBlobId(hex: string): string {
   const binary = Array.from(bytes)
     .map((b) => String.fromCharCode(b))
     .join("");
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
