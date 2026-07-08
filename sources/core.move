@@ -441,7 +441,7 @@ module suisend::core {
 
         // Calculate the yield earned: total withdrawn minus original deposit.
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         // Transfer the full amount (principal + yield) to the recipient.
         transfer::public_transfer(coin, recipient);
@@ -515,7 +515,7 @@ module suisend::core {
         // Withdraw principal + yield from the vault.
         let coin = yield::withdraw(vault, record.position_id, clock, ctx);
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         // Send all funds back to the recorded sender.
         transfer::public_transfer(coin, record.sender);
@@ -578,7 +578,7 @@ module suisend::core {
         // Withdraw principal + yield.
         let coin = yield::withdraw(vault, record.position_id, clock, ctx);
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         // Send all funds back to the sender.
         transfer::public_transfer(coin, record.sender);
@@ -765,7 +765,7 @@ module suisend::core {
         let recipient = tx_context::sender(ctx);
         let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         transfer::public_transfer(coin, recipient);
 
@@ -810,7 +810,7 @@ module suisend::core {
 
         let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         transfer::public_transfer(coin, record.sender);
 
@@ -845,7 +845,7 @@ module suisend::core {
 
         let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         transfer::public_transfer(coin, record.sender);
 
@@ -966,7 +966,7 @@ module suisend::core {
         let recipient = tx_context::sender(ctx);
         let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         transfer::public_transfer(coin, recipient);
 
@@ -1011,7 +1011,7 @@ module suisend::core {
 
         let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         transfer::public_transfer(coin, record.sender);
 
@@ -1046,7 +1046,7 @@ module suisend::core {
 
         let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
         let total_value = coin.value();
-        let yield_earned = total_value - record.amount;
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
 
         transfer::public_transfer(coin, record.sender);
 

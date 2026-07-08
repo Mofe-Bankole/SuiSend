@@ -4,15 +4,18 @@ const env = (key: string, fallback: string): string =>
   (typeof process !== "undefined" ? (process.env as Record<string, string | undefined>)[key] : undefined) ?? fallback;
 
 export const SUISEND_PACKAGE_ID = env("NEXT_PUBLIC_SUISEND_PACKAGE_ID",
-  "0x15e985c9c82b8d4ed5d171b2bc6703aa78507c9cc1473ae6c0daf8b54625adcb");
+  "0xcc8845801c91f3c4a7884553b07070b11ddcccbd5d61a544d81c380a128aa94e");
 export const SUISEND_PACKAGE_ID_V2 = env("NEXT_PUBLIC_SUISEND_PACKAGE_ID_V2",
   "0x837811a8e28aab9c0d5ca9b369aa1da1e178de3e4c1a1c6f33dbf025738ee852");
+export const SUISEND_PACKAGE_ID_V3 = env("NEXT_PUBLIC_SUISEND_PACKAGE_ID_V3",
+  "0x15e985c9c82b8d4ed5d171b2bc6703aa78507c9cc1473ae6c0daf8b54625adcb");
 export const SUISEND_ORIGINAL_PACKAGE_ID = env("NEXT_PUBLIC_SUISEND_ORIGINAL_PACKAGE_ID",
   "0xbefdf372ed7b01a45561b71eb62ba2aed0370f7b79221d42ba1a14e8f75d6fe9");
 
 export const SUISEND_ALL_PACKAGE_IDS = [
   SUISEND_ORIGINAL_PACKAGE_ID,
   SUISEND_PACKAGE_ID_V2,
+  SUISEND_PACKAGE_ID_V3,
   SUISEND_PACKAGE_ID,
 ];
 

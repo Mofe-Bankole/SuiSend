@@ -424,7 +424,9 @@ async function queryAllPaymentCreatedEvents(
         limit: 50,
       });
       allData.push(...result.data);
-    } catch { /* skip packages that never emitted this event type */ }
+    } catch {
+      /* skip packages that never emitted this event type */
+    }
   }
   return { data: allData };
 }
