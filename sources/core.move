@@ -27,6 +27,7 @@ module suisend::core {
     use sui::coin::{Self, Coin};
     use sui::dynamic_field as df;
     use sui::event;
+    use sui::hash;
     use sui::object::{Self, ID, UID};
     use std::option::{Self, Option};
     use sui::sui::SUI;
@@ -34,7 +35,6 @@ module suisend::core {
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
 
-    use suisend::yield;
     use suisend::yield::YieldVault;
 
     use protocol::market::Market;
@@ -65,9 +65,6 @@ module suisend::core {
     /// Payment has been claimed by the recipient.
     const STATE_CLAIMED: u8 = 1;
 
-    /// Payment has been refunded to the sender.
-    const STATE_REFUNDED: u8 = 2;
-
     // ─── Error codes ─────────────────────────────────────────────────────────
 
     /// The caller is not authorized for this action.
@@ -80,17 +77,42 @@ module suisend::core {
     /// The payment has not expired yet, so the agent cannot refund it.
     const ENotYetExpired: u64 = 3;
 
-    /// The provided link_hash does not match any active payment.
-    const ELinkHashNotFound: u64 = 4;
-
     /// A payment with this link_hash already exists (hash collision).
     const ELinkHashAlreadyExists: u64 = 5;
 
     /// The expiry offset is invalid (below minimum or above maximum).
     const EInvalidExpiry: u64 = 6;
 
-    /// The YieldRouterCap does not authorize this rebalance.
-    const EUnauthorizedRebalance: u64 = 7;
+    /// This function has been retired in the v5 upgrade.
+    const EDeprecated: u64 = 8;
+
+    /// The payment requires a PIN but none (or an empty one) was provided.
+    const EPinRequired: u64 = 9;
+
+    /// The provided PIN preimage does not match the payment's pin_hash.
+    const EPinMismatch: u64 = 10;
+
+    /// The payment is locked to a specific recipient address and the caller
+    /// is not that address.
+    const ERecipientMismatch: u64 = 11;
+
+    /// The book is paused by the admin. Creates and claims are blocked;
+    /// refunds always remain possible.
+    const EPaused: u64 = 12;
+
+    /// The claim_key or pin_hash is not a valid 32-byte blake2b-256 digest.
+    const EInvalidDigest: u64 = 13;
+
+    // ─── Authorization modes (v2) ────────────────────────────────────────────
+
+    /// Anyone who knows the claim secret can claim (like cash).
+    const AUTH_BEARER: u8 = 0;
+
+    /// Claim requires the secret + the PIN preimage (two-channel).
+    const AUTH_PIN: u8 = 1;
+
+    /// Claim is locked to a specific recipient address.
+    const AUTH_LOCKED: u8 = 2;
 
     // ─── Objects ─────────────────────────────────────────────────────────────
 
@@ -326,72 +348,22 @@ module suisend::core {
     /// ## Aborts
     /// - `ELinkHashAlreadyExists` if the link_hash is already in the table.
     /// - `EInvalidExpiry` if expiry_offset_ms is < MIN_LOCKUP_MS.
+    /// DEPRECATED in v5 — the mock yield path earned zero yield by design
+    /// and must not accept real mainnet deposits. Retained as a hard-abort
+    /// stub because the `compatible` upgrade policy forbids removing public
+    /// entry functions. Use `create_payment_v2` instead.
     public entry fun create_payment(
-        book: &mut PaymentBook,
-        vault: &mut YieldVault,
-        coin: Coin<SUI>,
-        link_hash: vector<u8>,
-        note_blob_id: Option<vector<u8>>,
-        expiry_offset_ms: u64,
-        protocol: u8,
-        clock: &Clock,
-        ctx: &mut TxContext,
+        _book: &mut PaymentBook,
+        _vault: &mut YieldVault,
+        _coin: Coin<SUI>,
+        _link_hash: vector<u8>,
+        _note_blob_id: Option<vector<u8>>,
+        _expiry_offset_ms: u64,
+        _protocol: u8,
+        _clock: &Clock,
+        _ctx: &mut TxContext,
     ) {
-        // Ensure the link_hash doesn't collide with an existing payment.
-        // Each payment must have a unique link_hash.
-        assert!(!table::contains(&book.payments, link_hash), ELinkHashAlreadyExists);
-
-        // Validate and cap the expiry offset.
-        // Minimum 60 seconds prevents instant-expiry payments.
-        assert!(expiry_offset_ms >= MIN_LOCKUP_MS, EInvalidExpiry);
-        let actual_expiry_offset = if (expiry_offset_ms > MAX_LOCKUP_MS) {
-            MAX_LOCKUP_MS
-        } else {
-            expiry_offset_ms
-        };
-
-        // Record the SUI amount BEFORE the coin is consumed by yield::deposit.
-        let amount = coin.value();
-
-        // Deposit the SUI into the yield protocol. This consumes the coin
-        // and returns a position_id we store in the payment record.
-        let position_id = yield::deposit(vault, coin, protocol, clock, ctx);
-
-        // Current timestamp used for both created_at and expiry calculation.
-        let now = clock.timestamp_ms();
-
-        // Build and store the PaymentRecord, keyed by link_hash.
-        table::add(&mut book.payments, link_hash, PaymentRecord {
-            link_hash: copy link_hash,
-            sender: tx_context::sender(ctx),
-            amount,
-            position_id,
-            protocol,
-            created_at: now,
-            expiry: now + actual_expiry_offset,
-            state: STATE_ACTIVE,
-            note_blob_id,
-            recipient: option::none(),
-        });
-
-        // Create a PaymentVoucher and transfer it to the sender.
-        // This voucher is needed for manual refunds before expiry.
-        let voucher = PaymentVoucher {
-            id: object::new(ctx),
-            sender: tx_context::sender(ctx),
-            link_hash,
-        };
-        transfer::public_transfer(voucher, tx_context::sender(ctx));
-
-        // Emit an event for the off-chain indexer.
-        event::emit(PaymentCreatedEvent {
-            link_hash: copy link_hash,
-            sender: tx_context::sender(ctx),
-            amount,
-            protocol,
-            created_at: now,
-            expiry: now + actual_expiry_offset,
-        });
+        abort EDeprecated
     }
 
     // ─── Payment lifecycle: CLAIM ───────────────────────────────────────────
@@ -418,55 +390,15 @@ module suisend::core {
     /// ## Aborts
     /// - `ELinkHashNotFound` if the link_hash is not in the PaymentBook.
     /// - `EWrongState` if the payment is not in STATE_ACTIVE.
+    /// DEPRECATED in v5 — see `create_payment`. Use `claim_payment_v2`.
     public entry fun claim_payment(
-        book: &mut PaymentBook,
-        vault: &mut YieldVault,
-        link_hash: vector<u8>,
-        clock: &Clock,
-        ctx: &mut TxContext,
+        _book: &mut PaymentBook,
+        _vault: &mut YieldVault,
+        _link_hash: vector<u8>,
+        _clock: &Clock,
+        _ctx: &mut TxContext,
     ) {
-        // Look up and remove the PaymentRecord from the table.
-        // Aborts if not found (ELinkHashNotFound).
-        let record = table::remove(&mut book.payments, link_hash);
-
-        // Verify the payment is still active (not already claimed/refunded).
-        assert!(record.state == STATE_ACTIVE , EWrongState);
-
-        // Record who is claiming — the transaction signer is the recipient.
-        let recipient = tx_context::sender(ctx);
-
-        // Withdraw the principal + accrued yield from the vault.
-        // This consumes the position_id and returns a Coin<SUI>.
-        let coin = yield::withdraw(vault, record.position_id, clock, ctx);
-
-        // Calculate the yield earned: total withdrawn minus original deposit.
-        let total_value = coin.value();
-        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
-
-        // Transfer the full amount (principal + yield) to the recipient.
-        transfer::public_transfer(coin, recipient);
-
-        // Create a ClaimReceipt as proof of claim.
-        let receipt = ClaimReceipt {
-            id: object::new(ctx),
-            payment_link_hash: link_hash,
-            original_amount: record.amount,
-            yield_earned,
-            total_claimed: total_value,
-            claimed_at: clock.timestamp_ms(),
-            recipient,
-        };
-        transfer::public_transfer(receipt, recipient);
-
-        // Emit a claim event for the off-chain indexer.
-        event::emit(PaymentClaimedEvent {
-            link_hash,
-            recipient,
-            amount: record.amount,
-            yield_earned,
-            claimed_at: clock.timestamp_ms(),
-        });
-        // PaymentRecord drops here because it has `drop`.
+        abort EDeprecated
     }
 
     // ─── Payment lifecycle: REFUND (by sender via voucher) ──────────────────
@@ -489,47 +421,15 @@ module suisend::core {
     /// - `EUnauthorized` if the caller is not the voucher's sender.
     /// - `ELinkHashNotFound` if the payment no longer exists.
     /// - `EWrongState` if the payment is not active.
+    /// DEPRECATED in v5 — see `create_payment`. Use `refund_sender_v2`.
     public entry fun refund_sender(
-        book: &mut PaymentBook,
-        vault: &mut YieldVault,
-        voucher: PaymentVoucher,
-        clock: &Clock,
-        ctx: &mut TxContext,
+        _book: &mut PaymentBook,
+        _vault: &mut YieldVault,
+        _voucher: PaymentVoucher,
+        _clock: &Clock,
+        _ctx: &mut TxContext,
     ) {
-        // Verify the caller is the sender who received the voucher.
-        assert!(voucher.sender == tx_context::sender(ctx), EUnauthorized);
-
-        // Extract the link_hash from the voucher before burning it.
-        let link_hash = voucher.link_hash;
-
-        // Burn the voucher — it can only be used once.
-        let PaymentVoucher { id: voucher_id, sender: _, link_hash: _ } = voucher;
-        object::delete(voucher_id);
-
-        // Look up and remove the PaymentRecord.
-        let record = table::remove(&mut book.payments, link_hash);
-
-        // Verify the payment is still active.
-        assert!(record.state == STATE_ACTIVE, EWrongState);
-
-        // Withdraw principal + yield from the vault.
-        let coin = yield::withdraw(vault, record.position_id, clock, ctx);
-        let total_value = coin.value();
-        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
-
-        // Send all funds back to the recorded sender.
-        transfer::public_transfer(coin, record.sender);
-
-        // Emit a refund event.
-        event::emit(PaymentRefundedEvent {
-            link_hash,
-            sender: record.sender,
-            amount: record.amount,
-            yield_earned,
-            refunded_at: clock.timestamp_ms(),
-            initiator: b"sender",
-        });
-        // PaymentRecord drops here.
+        abort EDeprecated
     }
 
     // ─── Payment lifecycle: REFUND (by agent after expiry) ──────────────────
@@ -554,45 +454,16 @@ module suisend::core {
     /// - `ENotYetExpired` if the payment's expiry hasn't been reached.
     /// - `ELinkHashNotFound` if the payment doesn't exist.
     /// - `EWrongState` if the payment is not active.
+    /// DEPRECATED in v5 — see `create_payment`. Use `refund_expired_v2`.
     public entry fun refund_expired(
-        book: &mut PaymentBook,
-        vault: &mut YieldVault,
-        link_hash: vector<u8>,
-        cap: &RefundAgentCap,
-        clock: &Clock,
-        ctx: &mut TxContext,
+        _book: &mut PaymentBook,
+        _vault: &mut YieldVault,
+        _link_hash: vector<u8>,
+        _cap: &RefundAgentCap,
+        _clock: &Clock,
+        _ctx: &mut TxContext,
     ) {
-        // Verify the caller is the authorized agent.
-        assert!(cap.agent == tx_context::sender(ctx), EUnauthorized);
-
-        // Look up the payment record.
-        let record = table::remove(&mut book.payments, link_hash);
-
-        // Verify the payment is still active.
-        assert!(record.state == STATE_ACTIVE, EWrongState);
-
-        // Verify the payment has expired.
-        let now = clock.timestamp_ms();
-        assert!(now >= record.expiry, ENotYetExpired);
-
-        // Withdraw principal + yield.
-        let coin = yield::withdraw(vault, record.position_id, clock, ctx);
-        let total_value = coin.value();
-        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
-
-        // Send all funds back to the sender.
-        transfer::public_transfer(coin, record.sender);
-
-        // Emit a refund event.
-        event::emit(PaymentRefundedEvent {
-            link_hash,
-            sender: record.sender,
-            amount: record.amount,
-            yield_earned,
-            refunded_at: now,
-            initiator: b"agent",
-        });
-        // PaymentRecord drops here.
+        abort EDeprecated
     }
 
     // ─── Admin functions ────────────────────────────────────────────────────
@@ -1058,5 +929,595 @@ module suisend::core {
             refunded_at: now,
             initiator: b"agent",
         });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  V5 — PAYMENT BOOK V2
+    //
+    //  Fixes delivered here (see audit/):
+    //  - F01: the claim secret is NEVER stored or emitted. The table key is
+    //    `blake2b256(secret)`; the URL carries the secret; claims hash and
+    //    compare. Events carry only the key — safe to display publicly.
+    //  - F19: per-link authorization modes. Bearer (like cash), PIN
+    //    (two-channel), or locked to a recipient address.
+    //  - F06: no `state` field — existence in the table IS active; removal
+    //    is terminal. Refunded payments no longer masquerade as claimed.
+    //  - F07: `coin_type` lives IN the record. The dynamic-field hack and
+    //    its storage leak are gone for v2 payments.
+    //  - F05: real pause switch (`paused`) administered by AdminCap.
+    //
+    //  Legacy (v1) paths above remain live for existing payments until they
+    //  drain by claim or refund. New payments MUST use the v2 functions.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Shared registry of v2 payments. Separate object from the legacy
+    /// PaymentBook (struct layouts cannot change under a compatible
+    /// upgrade). Created once by the deployer via `init_book_v2`.
+    public struct PaymentBookV2 has key {
+        id: UID,
+        /// blake2b256(claim_secret) → PaymentRecordV2
+        payments: Table<vector<u8>, PaymentRecordV2>,
+        /// Admin pause. Blocks creates and claims; refunds always allowed.
+        paused: bool,
+    }
+
+    /// A v2 payment record. Note what is NOT here (vs v1): no `state`
+    /// field, no `link_hash` plaintext, no dynamic-field coin type.
+    public struct PaymentRecordV2 has store, drop {
+        sender: address,
+        amount: u64,
+        position_id: ID,
+        coin_type: u8,
+        created_at: u64,
+        expiry: u64,
+        /// When set, only this address may claim (AUTH_LOCKED).
+        recipient_lock: Option<address>,
+        /// blake2b256(pin). When set, claim must present the PIN (AUTH_PIN).
+        pin_hash: Option<vector<u8>>,
+        note_blob_id: Option<vector<u8>>,
+    }
+
+    // ─── V2 events (no secret material — ever) ─────────────────────────
+
+    public struct PaymentCreatedEventV2 has copy, drop {
+        claim_key: vector<u8>,
+        sender: address,
+        amount: u64,
+        coin_type: u8,
+        auth_mode: u8,
+        recipient_lock: Option<address>,
+        created_at: u64,
+        expiry: u64,
+    }
+
+    public struct PaymentClaimedEventV2 has copy, drop {
+        claim_key: vector<u8>,
+        recipient: address,
+        amount: u64,
+        yield_earned: u64,
+        claimed_at: u64,
+    }
+
+    public struct PaymentRefundedEventV2 has copy, drop {
+        claim_key: vector<u8>,
+        sender: address,
+        amount: u64,
+        yield_earned: u64,
+        refunded_at: u64,
+        initiator: vector<u8>,
+    }
+
+    // ─── V2 initialization & admin ──────────────────────────────────────
+
+    /// Create and share the v2 PaymentBook. One-time, deployer-only.
+    public entry fun init_book_v2(_: &AdminCap, ctx: &mut TxContext) {
+        let book = PaymentBookV2 {
+            id: object::new(ctx),
+            payments: table::new(ctx),
+            paused: false,
+        };
+        transfer::share_object(book);
+    }
+
+    /// The real pause switch (F05). Refunds are NOT gated by pause — users
+    /// must always be able to exit.
+    public entry fun set_book_v2_paused(_: &AdminCap, book: &mut PaymentBookV2, paused: bool) {
+        book.paused = paused;
+    }
+
+    /// Admin-gated generic vault creation (F09). Replaces the permissionless
+    /// `init_vault_generic`, which is now a hard-abort stub.
+    public entry fun admin_init_vault_generic<T>(_: &AdminCap, ctx: &mut TxContext) {
+        yield_scallop::new_vault_generic<T>(ctx);
+    }
+
+    // ─── V2 authorization helper ────────────────────────────────────────
+
+    /// Assert the caller may claim this record. Lock first, then PIN.
+    /// Package-visible so tests can exercise it directly.
+    public(package) fun assert_claim_authorized(
+        record: &PaymentRecordV2,
+        pin: &Option<vector<u8>>,
+        ctx: &TxContext,
+    ) {
+        if (option::is_some(&record.recipient_lock)) {
+            assert!(
+                tx_context::sender(ctx) == *option::borrow(&record.recipient_lock),
+                ERecipientMismatch,
+            );
+        };
+        if (option::is_some(&record.pin_hash)) {
+            assert!(option::is_some(pin), EPinRequired);
+            let provided = hash::blake2b256(option::borrow(pin));
+            assert!(provided == *option::borrow(&record.pin_hash), EPinMismatch);
+        };
+    }
+
+    fun derive_auth_mode(record: &PaymentRecordV2): u8 {
+        if (option::is_some(&record.recipient_lock)) {
+            AUTH_LOCKED
+        } else if (option::is_some(&record.pin_hash)) {
+            AUTH_PIN
+        } else {
+            AUTH_BEARER
+        }
+    }
+
+    fun validate_v2_inputs(
+        book: &PaymentBookV2,
+        claim_key: &vector<u8>,
+        pin_hash: &Option<vector<u8>>,
+        expiry_offset_ms: u64,
+    ) {
+        assert!(!book.paused, EPaused);
+        assert!(claim_key.length() == 32, EInvalidDigest);
+        assert!(!table::contains(&book.payments, *claim_key), ELinkHashAlreadyExists);
+        assert!(expiry_offset_ms >= MIN_LOCKUP_MS, EInvalidExpiry);
+        if (option::is_some(pin_hash)) {
+            assert!(option::borrow(pin_hash).length() == 32, EInvalidDigest);
+        };
+    }
+
+    fun capped_expiry(now: u64, expiry_offset_ms: u64): u64 {
+        let offset = if (expiry_offset_ms > MAX_LOCKUP_MS) {
+            MAX_LOCKUP_MS
+        } else {
+            expiry_offset_ms
+        };
+        now + offset
+    }
+
+    // ─── V2 lifecycle: CREATE ───────────────────────────────────────────
+
+    /// Create a v2 payment (SUI via Scallop).
+    ///
+    /// `claim_key` MUST be `blake2b256(secret)` computed off-chain — the raw
+    /// secret never touches the chain until the legitimate claim spends it.
+    public entry fun create_payment_v2(
+        book: &mut PaymentBookV2,
+        vault: &mut ScallopYieldVault,
+        coin: Coin<SUI>,
+        claim_key: vector<u8>,
+        recipient_lock: Option<address>,
+        pin_hash: Option<vector<u8>>,
+        note_blob_id: Option<vector<u8>>,
+        expiry_offset_ms: u64,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        validate_v2_inputs(book, &claim_key, &pin_hash, expiry_offset_ms);
+
+        let amount = coin.value();
+        let position_id = yield_scallop::deposit_scallop(vault, coin, version, market, clock, ctx);
+        let now = clock.timestamp_ms();
+
+        let record = PaymentRecordV2 {
+            sender: tx_context::sender(ctx),
+            amount,
+            position_id,
+            coin_type: 0,
+            created_at: now,
+            expiry: capped_expiry(now, expiry_offset_ms),
+            recipient_lock,
+            pin_hash,
+            note_blob_id,
+        };
+        let auth_mode = derive_auth_mode(&record);
+        let expiry = record.expiry;
+        table::add(&mut book.payments, claim_key, record);
+
+        let voucher = PaymentVoucher {
+            id: object::new(ctx),
+            sender: tx_context::sender(ctx),
+            link_hash: claim_key,
+        };
+        transfer::public_transfer(voucher, tx_context::sender(ctx));
+
+        event::emit(PaymentCreatedEventV2 {
+            claim_key,
+            sender: tx_context::sender(ctx),
+            amount,
+            coin_type: 0,
+            auth_mode,
+            recipient_lock: option::none(),
+            created_at: now,
+            expiry,
+        });
+    }
+
+    /// Create a v2 payment for any coin type (USDC etc.).
+    public entry fun create_payment_v2_generic<T>(
+        book: &mut PaymentBookV2,
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        coin: Coin<T>,
+        claim_key: vector<u8>,
+        recipient_lock: Option<address>,
+        pin_hash: Option<vector<u8>>,
+        note_blob_id: Option<vector<u8>>,
+        expiry_offset_ms: u64,
+        coin_type: u8,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        validate_v2_inputs(book, &claim_key, &pin_hash, expiry_offset_ms);
+
+        let amount = coin.value();
+        let position_id = yield_scallop::deposit_generic(vault, coin, version, market, clock, ctx);
+        let now = clock.timestamp_ms();
+
+        let record = PaymentRecordV2 {
+            sender: tx_context::sender(ctx),
+            amount,
+            position_id,
+            coin_type,
+            created_at: now,
+            expiry: capped_expiry(now, expiry_offset_ms),
+            recipient_lock,
+            pin_hash,
+            note_blob_id,
+        };
+        let auth_mode = derive_auth_mode(&record);
+        let expiry = record.expiry;
+        table::add(&mut book.payments, claim_key, record);
+
+        let voucher = PaymentVoucher {
+            id: object::new(ctx),
+            sender: tx_context::sender(ctx),
+            link_hash: claim_key,
+        };
+        transfer::public_transfer(voucher, tx_context::sender(ctx));
+
+        event::emit(PaymentCreatedEventV2 {
+            claim_key,
+            sender: tx_context::sender(ctx),
+            amount,
+            coin_type,
+            auth_mode,
+            recipient_lock: option::none(),
+            created_at: now,
+            expiry,
+        });
+    }
+
+    // ─── V2 lifecycle: CLAIM ────────────────────────────────────────────
+
+    /// Claim a v2 payment. The caller presents the `secret`; the contract
+    /// hashes it and looks the record up by that key. Authorization (lock
+    /// and/or PIN) is enforced before any funds move — a failed assert
+    /// reverts the whole transaction, so the record stays put.
+    public entry fun claim_payment_v2(
+        book: &mut PaymentBookV2,
+        vault: &mut ScallopYieldVault,
+        secret: vector<u8>,
+        pin: Option<vector<u8>>,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(!book.paused, EPaused);
+        let claim_key = hash::blake2b256(&secret);
+        let record = table::remove(&mut book.payments, claim_key);
+        assert_claim_authorized(&record, &pin, ctx);
+
+        let recipient = tx_context::sender(ctx);
+        let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
+
+        transfer::public_transfer(coin, recipient);
+
+        let receipt = ClaimReceipt {
+            id: object::new(ctx),
+            payment_link_hash: claim_key,
+            original_amount: record.amount,
+            yield_earned,
+            total_claimed: total_value,
+            claimed_at: clock.timestamp_ms(),
+            recipient,
+        };
+        transfer::public_transfer(receipt, recipient);
+
+        event::emit(PaymentClaimedEventV2 {
+            claim_key,
+            recipient,
+            amount: record.amount,
+            yield_earned,
+            claimed_at: clock.timestamp_ms(),
+        });
+    }
+
+    /// Claim a v2 payment for any coin type.
+    public entry fun claim_payment_v2_generic<T>(
+        book: &mut PaymentBookV2,
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        secret: vector<u8>,
+        pin: Option<vector<u8>>,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(!book.paused, EPaused);
+        let claim_key = hash::blake2b256(&secret);
+        let record = table::remove(&mut book.payments, claim_key);
+        assert_claim_authorized(&record, &pin, ctx);
+
+        let recipient = tx_context::sender(ctx);
+        let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
+
+        transfer::public_transfer(coin, recipient);
+
+        let receipt = ClaimReceipt {
+            id: object::new(ctx),
+            payment_link_hash: claim_key,
+            original_amount: record.amount,
+            yield_earned,
+            total_claimed: total_value,
+            claimed_at: clock.timestamp_ms(),
+            recipient,
+        };
+        transfer::public_transfer(receipt, recipient);
+
+        event::emit(PaymentClaimedEventV2 {
+            claim_key,
+            recipient,
+            amount: record.amount,
+            yield_earned,
+            claimed_at: clock.timestamp_ms(),
+        });
+    }
+
+    // ─── V2 lifecycle: REFUND ───────────────────────────────────────────
+    // Refunds are NEVER gated by pause — exiting is always safe.
+
+    /// Sender refunds their own unclaimed v2 payment (voucher required).
+    public entry fun refund_sender_v2(
+        book: &mut PaymentBookV2,
+        vault: &mut ScallopYieldVault,
+        voucher: PaymentVoucher,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(voucher.sender == tx_context::sender(ctx), EUnauthorized);
+
+        let claim_key = voucher.link_hash;
+        let PaymentVoucher { id: voucher_id, sender: _, link_hash: _ } = voucher;
+        object::delete(voucher_id);
+
+        let record = table::remove(&mut book.payments, claim_key);
+        let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
+
+        transfer::public_transfer(coin, record.sender);
+
+        event::emit(PaymentRefundedEventV2 {
+            claim_key,
+            sender: record.sender,
+            amount: record.amount,
+            yield_earned,
+            refunded_at: clock.timestamp_ms(),
+            initiator: b"sender",
+        });
+    }
+
+    /// Sender refunds their own unclaimed v2 payment (any coin type).
+    public entry fun refund_sender_v2_generic<T>(
+        book: &mut PaymentBookV2,
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        voucher: PaymentVoucher,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(voucher.sender == tx_context::sender(ctx), EUnauthorized);
+
+        let claim_key = voucher.link_hash;
+        let PaymentVoucher { id: voucher_id, sender: _, link_hash: _ } = voucher;
+        object::delete(voucher_id);
+
+        let record = table::remove(&mut book.payments, claim_key);
+        let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
+
+        transfer::public_transfer(coin, record.sender);
+
+        event::emit(PaymentRefundedEventV2 {
+            claim_key,
+            sender: record.sender,
+            amount: record.amount,
+            yield_earned,
+            refunded_at: clock.timestamp_ms(),
+            initiator: b"sender",
+        });
+    }
+
+    /// Agent refunds an expired v2 payment.
+    public entry fun refund_expired_v2(
+        book: &mut PaymentBookV2,
+        vault: &mut ScallopYieldVault,
+        claim_key: vector<u8>,
+        cap: &RefundAgentCap,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(cap.agent == tx_context::sender(ctx), EUnauthorized);
+
+        let record = table::remove(&mut book.payments, claim_key);
+        let now = clock.timestamp_ms();
+        assert!(now >= record.expiry, ENotYetExpired);
+
+        let coin = yield_scallop::withdraw_scallop(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
+
+        transfer::public_transfer(coin, record.sender);
+
+        event::emit(PaymentRefundedEventV2 {
+            claim_key,
+            sender: record.sender,
+            amount: record.amount,
+            yield_earned,
+            refunded_at: now,
+            initiator: b"agent",
+        });
+    }
+
+    /// Agent refunds an expired v2 payment (any coin type).
+    public entry fun refund_expired_v2_generic<T>(
+        book: &mut PaymentBookV2,
+        vault: &mut ScallopYieldVaultGeneric<T>,
+        claim_key: vector<u8>,
+        cap: &RefundAgentCap,
+        version: &Version,
+        market: &mut Market,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(cap.agent == tx_context::sender(ctx), EUnauthorized);
+
+        let record = table::remove(&mut book.payments, claim_key);
+        let now = clock.timestamp_ms();
+        assert!(now >= record.expiry, ENotYetExpired);
+
+        let coin = yield_scallop::withdraw_generic(vault, record.position_id, version, market, clock, ctx);
+        let total_value = coin.value();
+        let yield_earned = if (total_value > record.amount) { total_value - record.amount } else { 0 };
+
+        transfer::public_transfer(coin, record.sender);
+
+        event::emit(PaymentRefundedEventV2 {
+            claim_key,
+            sender: record.sender,
+            amount: record.amount,
+            yield_earned,
+            refunded_at: now,
+            initiator: b"agent",
+        });
+    }
+
+    // ─── V2 read-only queries ───────────────────────────────────────────
+
+    public fun payment_v2_exists(book: &PaymentBookV2, claim_key: vector<u8>): bool {
+        table::contains(&book.payments, claim_key)
+    }
+
+    public fun payment_v2_amount(book: &PaymentBookV2, claim_key: vector<u8>): u64 {
+        if (table::contains(&book.payments, claim_key)) {
+            table::borrow(&book.payments, claim_key).amount
+        } else {
+            0
+        }
+    }
+
+    public fun payment_v2_expiry(book: &PaymentBookV2, claim_key: vector<u8>): u64 {
+        if (table::contains(&book.payments, claim_key)) {
+            table::borrow(&book.payments, claim_key).expiry
+        } else {
+            0
+        }
+    }
+
+    public fun payment_v2_coin_type(book: &PaymentBookV2, claim_key: vector<u8>): u8 {
+        if (table::contains(&book.payments, claim_key)) {
+            table::borrow(&book.payments, claim_key).coin_type
+        } else {
+            0
+        }
+    }
+
+    public fun payment_v2_auth_mode(book: &PaymentBookV2, claim_key: vector<u8>): u8 {
+        if (table::contains(&book.payments, claim_key)) {
+            derive_auth_mode(table::borrow(&book.payments, claim_key))
+        } else {
+            AUTH_BEARER
+        }
+    }
+
+    public fun payment_v2_recipient_lock(book: &PaymentBookV2, claim_key: vector<u8>): address {
+        if (table::contains(&book.payments, claim_key)) {
+            let lock = &table::borrow(&book.payments, claim_key).recipient_lock;
+            if (option::is_some(lock)) {
+                *option::borrow(lock)
+            } else {
+                @0x0
+            }
+        } else {
+            @0x0
+        }
+    }
+
+    public fun payment_v2_note_blob_id(book: &PaymentBookV2, claim_key: vector<u8>): vector<u8> {
+        if (table::contains(&book.payments, claim_key)) {
+            let note = &table::borrow(&book.payments, claim_key).note_blob_id;
+            if (option::is_some(note)) {
+                *option::borrow(note)
+            } else {
+                vector[]
+            }
+        } else {
+            vector[]
+        }
+    }
+
+    public fun payment_v2_is_paused(book: &PaymentBookV2): bool {
+        book.paused
+    }
+
+    // ─── V2 test helpers ────────────────────────────────────────────────
+
+    #[test_only]
+    public(package) fun new_record_v2_for_testing(
+        recipient_lock: Option<address>,
+        pin_hash: Option<vector<u8>>,
+        ctx: &mut TxContext,
+    ): PaymentRecordV2 {
+        let uid = object::new(ctx);
+        let position_id = uid.to_inner();
+        object::delete(uid);
+        PaymentRecordV2 {
+            sender: @0xA,
+            amount: 1000,
+            position_id,
+            coin_type: 0,
+            created_at: 0,
+            expiry: 0,
+            recipient_lock,
+            pin_hash,
+            note_blob_id: option::none(),
+        }
     }
 }

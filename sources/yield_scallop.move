@@ -26,9 +26,8 @@ module suisend::yield_scallop {
 
     const PROTOCOL_SCALLOP: u8 = 1;
 
-    const EPositionNotFound: u64 = 1;
-
-    const EInvalidAmount: u64 = 2;
+    /// This function has been retired in the v5 upgrade.
+    const EDeprecated: u64 = 3;
 
     /// Shared vault holding sSUI (Coin<MarketCoin<SUI>>) deposited into
     /// Scallop's lending pool.
@@ -248,12 +247,18 @@ module suisend::yield_scallop {
     // │   - captures vault ID → stored in constants.ts           │
     // └──────────────────────────────────────────────────────────┘
 
-    /// Create a new generic yield vault for coin type T.
-    ///
-    /// Call this once per coin via PTB, passing the coin type as
-    /// a type argument. The returned object ID is the vault address
-    /// used in all subsequent create/claim PTBs for that coin.
-    public fun init_vault_generic<T>(ctx: &mut TxContext) {
+    /// DEPRECATED in v5 (F09) — permissionless vault creation let anyone
+    /// spawn competing vaults for the same coin type. Retained as a
+    /// hard-abort stub because the `compatible` upgrade policy forbids
+    /// removing public functions. Use `core::admin_init_vault_generic`.
+    #[allow(unused_type_parameter)]
+    public fun init_vault_generic<T>(_ctx: &mut TxContext) {
+        abort EDeprecated
+    }
+
+    /// Package-internal constructor used by `core::admin_init_vault_generic`
+    /// so vault creation is gated by AdminCap.
+    public(package) fun new_vault_generic<T>(ctx: &mut TxContext) {
         let vault = ScallopYieldVaultGeneric<T> {
             id: object::new(ctx),
             scoin_balance: balance::zero<MarketCoin<T>>(),

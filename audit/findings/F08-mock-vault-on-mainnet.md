@@ -3,7 +3,7 @@
 - **Severity:** P1
 - **Area:** contracts
 - **Phase:** 3
-- **Status:** Open
+- **Status:** 🔶 Fixed in code (2026-10-02, pending deployment): all four mock entry functions (`create_payment`, `claim_payment`, `refund_sender`, `refund_expired`) are now hard-abort stubs (`EDeprecated`). Public functions can't be removed under the compatible policy, so they're neutralized by body change. The mock YieldVault is inert.
 
 ## Evidence
 

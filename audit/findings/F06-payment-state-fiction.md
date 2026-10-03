@@ -3,7 +3,7 @@
 - **Severity:** P1
 - **Area:** contracts (surfaced in frontend)
 - **Phase:** 3
-- **Status:** Open
+- **Status:** 🔶 Fixed in code (2026-10-02, pending deployment): `PaymentRecordV2` has no `state` field — existence in the table IS active; removal is terminal. Terminal truth comes from `PaymentClaimedEventV2` / `PaymentRefundedEventV2`. (Struct layouts are frozen under the compatible upgrade policy, so v1 records keep their vestigial field; v2 path eliminates it.)
 
 ## Evidence
 

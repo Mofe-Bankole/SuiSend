@@ -3,7 +3,7 @@
 - **Severity:** P1
 - **Area:** contracts
 - **Phase:** 3
-- **Status:** Open
+- **Status:** 🔶 Fixed in code (2026-10-02, pending deployment): `init_vault_generic` is a hard-abort stub; new `admin_init_vault_generic` is gated by AdminCap via a package-internal constructor (`yield_scallop::new_vault_generic`).
 
 ## Evidence
 

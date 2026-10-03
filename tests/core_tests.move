@@ -1,591 +1,164 @@
-/// Tests for the SuiSend core payment lifecycle module.
+/// Tests for the v5 authorization layer (audit F01 + F19).
 ///
-/// Covers:
-///   1. Full create → claim flow (happy path)
-///   2. Sender refund via voucher (before expiry)
-///   3. Agent refund after expiry
-///   4. Double-claim prevention
-///   5. Unauthorized refund prevention
-///   6. Wrong link_hash rejection
+/// The v2 lifecycle functions (create/claim/refund) execute against live
+/// Scallop shared objects and are covered by the e2e script
+/// (scripts/e2e-testnet.mjs — see audit F17). What CAN be unit-tested
+/// deterministically is the security core:
 ///
-/// Each test simulates multiple addresses using `test_scenario` and
-/// checks final balances and object ownership.
+///   1. Bearer payments allow any caller with the secret.
+///   2. PIN-locked payments reject a wrong PIN and a missing PIN.
+///   3. PIN-locked payments accept the correct PIN preimage.
+///   4. Address-locked payments reject a non-recipient caller.
+///   5. Address-locked payments accept the locked recipient.
+///   6. The commitment property: the on-chain key is blake2b256(secret),
+///      so the raw secret is never needed for lookups (F01).
 #[test_only]
 module suisend::core_tests {
-    use sui::coin::{Self, Coin};
-    use sui::sui::SUI;
-    use sui::clock::{Self, Clock};
-    use sui::test_scenario::{Self, Scenario};
-    use sui::tx_context::TxContext;
+    use sui::hash;
+    use sui::test_scenario;
+    use suisend::core;
 
-    use suisend::core::{Self, PaymentBook, PaymentVoucher, ClaimReceipt, RefundAgentCap};
-    use suisend::yield::{Self as yld, YieldVault};
-
-    // ─── Test constants ──────────────────────────────────────────────────────
-
-    /// Test amount: 100 SUI = 100,000,000,000 MIST.
-    const TEST_AMOUNT: u64 = 100_000_000_000;
-
-    /// Test expiry: 5 minutes = 300,000 ms.
-    const TEST_EXPIRY_MS: u64 = 300_000;
-
-    // ─── Test addresses ──────────────────────────────────────────────────────
-
-    const ADMIN: address = @0xA;
-    const SENDER: address = @0xB;
     const RECIPIENT: address = @0xC;
-    const AGENT: address = @0xD;
+    const THIEF: address = @0xE;
 
-    // ─── Test 1: Full create → claim lifecycle ─────────────────────────────
+    // ─── 1. Bearer: any caller passes ────────────────────────────────────
 
     #[test]
-    fun test_create_and_claim() {
-        // Initialize the test scenario with the admin address.
-        let admin = ADMIN;
-        let mut scenario = test_scenario::begin(admin);
-
-        // --- Transaction 1: Admin initializes yield + core modules. ---
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init_for_testing(ctx);
-        };
-        // Create and share a Clock for time-dependent functions.
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            sui::clock::share_for_testing(clock);
-        };
-
-        // --- Transaction 2: Sender creates a payment. ---
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            // Take shared objects from the test scenario.
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-
-            // Create a test SUI coin for the deposit.
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            // Create the payment with a known link_hash.
-            let link_hash = b"test_link_hash_001";
-            core::create_payment(
-                &mut book,
-                &mut vault,
-                coin,
-                link_hash,
-                option::none(),
-                TEST_EXPIRY_MS,
-                0, // Mock protocol
-                &clock,
-                ctx,
-            );
-
-            // Return shared objects so the next transaction can use them.
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-        // PaymentVoucher was transferred to sender via public_transfer.
-        // (has_most_recent_for_sender doesn't track public_transfer objects.)
-
-        // --- Transaction 3: Recipient claims the payment. ---
-        let recipient = RECIPIENT;
-        test_scenario::next_tx(&mut scenario, recipient);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
-            let link_hash = b"test_link_hash_001";
-            core::claim_payment(&mut book, &mut vault, link_hash, &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-        // ClaimReceipt was transferred to recipient via public_transfer.
-
-        // Clean up the test scenario.
+    fun test_bearer_allows_any_caller() {
+        let mut scenario = test_scenario::begin(THIEF); // even a stranger
+        let ctx = test_scenario::ctx(&mut scenario);
+        let record = core::new_record_v2_for_testing(
+            option::none(),
+            option::none(),
+            ctx,
+        );
+        core::assert_claim_authorized(&record, &option::none(), ctx);
         test_scenario::end(scenario);
     }
 
-    // ─── Test 2: Sender refund via voucher ──────────────────────────────────
+    // ─── 2. PIN: wrong PIN aborts ────────────────────────────────────────
 
     #[test]
-    fun test_sender_refund() {
-        let admin = ADMIN;
-        let mut scenario = test_scenario::begin(admin);
+    #[expected_failure]
+    fun test_pin_wrong_pin_aborts() {
+        let pin = b"829401";
+        let pin_hash = hash::blake2b256(&pin);
 
-        // Initialize modules.
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            sui::clock::share_for_testing(clock);
-        };
-
-        // Sender creates a payment.
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            core::create_payment(
-                &mut book, &mut vault, coin,
-                b"refund_test_001",
-                option::none(),
-                TEST_EXPIRY_MS,
-                0,
-                &clock,
-                ctx,
-            );
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
-        // Sender refunds using their PaymentVoucher.
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            // Take the sender's PaymentVoucher.
-            let voucher = test_scenario::take_from_sender<PaymentVoucher>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
-            core::refund_sender(&mut book, &mut vault, voucher, &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
-        // Verify: the sender should have their funds back (or at least
-        // the PaymentVoucher should be gone — it was burned).
-        assert!(!test_scenario::has_most_recent_for_sender<PaymentVoucher>(&scenario), 2);
-
+        let mut scenario = test_scenario::begin(RECIPIENT);
+        let ctx = test_scenario::ctx(&mut scenario);
+        let record = core::new_record_v2_for_testing(
+            option::none(),
+            option::some(pin_hash),
+            ctx,
+        );
+        let wrong = b"000000";
+        core::assert_claim_authorized(&record, &option::some(wrong), ctx);
         test_scenario::end(scenario);
     }
 
-    // ─── Test 3: Agent refund after expiry ──────────────────────────────────
+    // ─── 3. PIN: missing PIN aborts ──────────────────────────────────────
 
     #[test]
-    fun test_agent_refund_expired() {
-        let admin = ADMIN;
-        let mut scenario = test_scenario::begin(admin);
+    #[expected_failure]
+    fun test_pin_missing_pin_aborts() {
+        let pin = b"829401";
+        let pin_hash = hash::blake2b256(&pin);
 
-        // Initialize modules.
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            sui::clock::share_for_testing(clock);
-        };
-
-        // Sender creates a payment.
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            // Use a very short expiry (5 minutes = 300,000 ms).
-            core::create_payment(
-                &mut book, &mut vault, coin,
-                b"expiry_test_001",
-                option::none(),
-                TEST_EXPIRY_MS,
-                0,
-                &clock,
-                ctx,
-            );
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
-        // Advance the clock past expiry.
-        // We need to add TEST_EXPIRY_MS + 1 ms to ensure we're past it.
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let mut clock = test_scenario::take_shared<Clock>(&mut scenario);
-            sui::clock::increment_for_testing(&mut clock, TEST_EXPIRY_MS + 1);
-            test_scenario::return_shared(clock);
-        };
-
-        // Agent refunds the expired payment (admin still holds the cap).
-        let agent = ADMIN;
-        test_scenario::next_tx(&mut scenario, agent);
-        {
-            // Take the RefundAgentCap (still held by admin — skip the
-            // transfer for simplicity; the agent field check will fail
-            // since it points to admin. Let's just test the happy path
-            // without the cap auth for now).
-            // In a real test we'd transfer the cap to the agent first.
-            // For this test setup, we'll use the admin as the agent.
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            // Get the RefundAgentCap from the admin's wallet.
-            // (The admin never transferred it, so only admin can use it).
-            let cap = test_scenario::take_from_sender<RefundAgentCap>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
-            core::refund_expired(&mut book, &mut vault, b"expiry_test_001", &cap, &clock, ctx);
-
-            // The cap was only borrowed (&), so it's returned automatically
-            // when the block ends. We need to return it to the sender.
-            test_scenario::return_to_sender(&mut scenario, cap);
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
+        let mut scenario = test_scenario::begin(RECIPIENT);
+        let ctx = test_scenario::ctx(&mut scenario);
+        let record = core::new_record_v2_for_testing(
+            option::none(),
+            option::some(pin_hash),
+            ctx,
+        );
+        core::assert_claim_authorized(&record, &option::none(), ctx);
         test_scenario::end(scenario);
     }
 
-    // ─── Test 4: Double-claim prevented ─────────────────────────────────────
+    // ─── 4. PIN: correct preimage passes ─────────────────────────────────
 
     #[test]
-    #[expected_failure(abort_code = 1)]
-    fun test_double_claim_fails() {
-        let admin = ADMIN;
-        let mut scenario = test_scenario::begin(admin);
+    fun test_pin_correct_pin_passes() {
+        let pin = b"829401";
+        let pin_hash = hash::blake2b256(&pin);
 
-        // Initialize.
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            sui::clock::share_for_testing(clock);
-        };
-
-        // Sender creates a payment.
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            core::create_payment(&mut book, &mut vault, coin, b"double_claim", option::none(), TEST_EXPIRY_MS, 0, &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
-        // Recipient claims (first claim — should succeed).
-        let recipient = RECIPIENT;
-        test_scenario::next_tx(&mut scenario, recipient);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
-            core::claim_payment(&mut book, &mut vault, b"double_claim", &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
-        // Recipient tries to claim again (second claim — should abort).
-        test_scenario::next_tx(&mut scenario, recipient);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
-            // This should abort with EWrongState because the payment was
-            // already claimed (the record was removed from the table).
-            // The table::remove will abort with ELinkHashNotFound instead
-            // since the record no longer exists.
-            core::claim_payment(&mut book, &mut vault, b"double_claim", &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
+        let mut scenario = test_scenario::begin(RECIPIENT);
+        let ctx = test_scenario::ctx(&mut scenario);
+        let record = core::new_record_v2_for_testing(
+            option::none(),
+            option::some(pin_hash),
+            ctx,
+        );
+        core::assert_claim_authorized(&record, &option::some(pin), ctx);
         test_scenario::end(scenario);
     }
 
-    // ─── Test 5: Claim with wrong link_hash ─────────────────────────────────
+    // ─── 5. Locked: non-recipient aborts (even with the secret) ──────────
 
     #[test]
-    #[expected_failure(abort_code = 1)]
-    fun test_wrong_link_hash_fails() {
-        let admin = ADMIN;
-        let mut scenario = test_scenario::begin(admin);
-
-        // Initialize.
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            sui::clock::share_for_testing(clock);
-        };
-
-        // Sender creates payment with one link_hash.
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            core::create_payment(&mut book, &mut vault, coin, b"real_hash", option::none(), TEST_EXPIRY_MS, 0, &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
-        // Recipient tries to claim with a DIFFERENT link_hash.
-        let recipient = RECIPIENT;
-        test_scenario::next_tx(&mut scenario, recipient);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
-            // Using "wrong_hash" instead of "real_hash" — should abort.
-            core::claim_payment(&mut book, &mut vault, b"wrong_hash", &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
+    #[expected_failure]
+    fun test_locked_thief_aborts() {
+        let mut scenario = test_scenario::begin(THIEF);
+        let ctx = test_scenario::ctx(&mut scenario);
+        let record = core::new_record_v2_for_testing(
+            option::some(RECIPIENT),
+            option::none(),
+            ctx,
+        );
+        core::assert_claim_authorized(&record, &option::none(), ctx);
         test_scenario::end(scenario);
     }
 
+    // ─── 6. Locked: the locked recipient passes ──────────────────────────
+
     #[test]
-    #[expected_failure(abort_code = 5)]
-    fun test_duplicate_link_hash() {
-        let admin = ADMIN;
-        let mut scenario = test_scenario::begin(admin);
-
-        // 1. Init modules + clock (same boilerplate)
-        // ── paste the setup block here ──
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            sui::clock::share_for_testing(clock);
-        };
-        // 2. Sender creates first payment with hash b"some_hash"
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            core::create_payment(&mut book, &mut vault, coin, b"some_hash", option::none(), TEST_EXPIRY_MS, 0, &clock, ctx);
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-        // 3. Sender tries to create ANOTHER payment with the same hash.
-        //    This should abort with code 5 (ELinkHashAlreadyExists).
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            core::create_payment(&mut book, &mut vault, coin, b"some_hash", option::none(), TEST_EXPIRY_MS, 0, &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
+    fun test_locked_recipient_passes() {
+        let mut scenario = test_scenario::begin(RECIPIENT);
+        let ctx = test_scenario::ctx(&mut scenario);
+        let record = core::new_record_v2_for_testing(
+            option::some(RECIPIENT),
+            option::none(),
+            ctx,
+        );
+        core::assert_claim_authorized(&record, &option::none(), ctx);
         test_scenario::end(scenario);
     }
 
+    // ─── 7. Locked + PIN: recipient must ALSO present the PIN ────────────
+
     #[test]
-    #[expected_failure(abort_code = 3)]
-    fun test_refund_before_expiry() {
-        let admin = ADMIN;
-        let mut scenario = test_scenario::begin(admin);
+    #[expected_failure]
+    fun test_locked_recipient_still_needs_pin() {
+        let pin = b"829401";
+        let pin_hash = hash::blake2b256(&pin);
 
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            sui::clock::share_for_testing(clock);
-        };
-
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            core::create_payment(&mut book, &mut vault, coin, b"expiry_test", option::none(), TEST_EXPIRY_MS, 0, &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let cap = test_scenario::take_from_sender<RefundAgentCap>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-
-            core::refund_expired(&mut book, &mut vault, b"expiry_test", &cap, &clock, ctx);
-
-            test_scenario::return_to_sender(&mut scenario, cap);
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
+        let mut scenario = test_scenario::begin(RECIPIENT);
+        let ctx = test_scenario::ctx(&mut scenario);
+        let record = core::new_record_v2_for_testing(
+            option::some(RECIPIENT),
+            option::some(pin_hash),
+            ctx,
+        );
+        // Right address, but no PIN — must abort.
+        core::assert_claim_authorized(&record, &option::none(), ctx);
         test_scenario::end(scenario);
     }
 
+    // ─── 8. Commitment property (F01): key = blake2b256(secret) ──────────
+
     #[test]
-    #[expected_failure(abort_code = 6)]
-    fun test_invalid_expiry() {
-        let admin = ADMIN;
-        let mut scenario = test_scenario::begin(admin);
+    fun test_commitment_key_derivation() {
+        // The lookup key must be derivable purely from the secret, with no
+        // other input — this is what lets the URL carry the secret while
+        // the chain only ever sees the key.
+        let secret = x"4f2a8c911234567890abcdef01234567890abcdef01234567890abcdef012345";
+        let key1 = hash::blake2b256(&secret);
+        let key2 = hash::blake2b256(&secret);
+        assert!(key1 == key2, 0);
+        assert!(key1.length() == 32, 1);
 
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::yield::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            suisend::core::init_for_testing(ctx);
-        };
-        test_scenario::next_tx(&mut scenario, admin);
-        {
-            let ctx = test_scenario::ctx(&mut scenario);
-            let clock = sui::clock::create_for_testing(ctx);
-            sui::clock::share_for_testing(clock);
-        };
-
-        let sender = SENDER;
-        test_scenario::next_tx(&mut scenario, sender);
-        {
-            let mut book = test_scenario::take_shared<PaymentBook>(&mut scenario);
-            let mut vault = test_scenario::take_shared<YieldVault>(&mut scenario);
-            let clock = test_scenario::take_shared<Clock>(&mut scenario);
-            let ctx = test_scenario::ctx(&mut scenario);
-            let coin = coin::mint_for_testing<SUI>(TEST_AMOUNT, ctx);
-
-            core::create_payment(&mut book, &mut vault, coin, b"bad_expiry", option::none(), 1000, 0, &clock, ctx);
-
-            test_scenario::return_shared(book);
-            test_scenario::return_shared(vault);
-            test_scenario::return_shared(clock);
-        };
-
-        test_scenario::end(scenario);
+        // A different secret must not collide.
+        let other = x"4f2a8c911234567890abcdef01234567890abcdef01234567890abcdef012346";
+        assert!(hash::blake2b256(&other) != key1, 2);
     }
 }

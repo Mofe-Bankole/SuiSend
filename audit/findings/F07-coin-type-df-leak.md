@@ -3,7 +3,7 @@
 - **Severity:** P1
 - **Area:** contracts
 - **Phase:** 3
-- **Status:** Open
+- **Status:** 🔶 Fixed in code (2026-10-02, pending deployment): `PaymentRecordV2.coin_type` lives in the record. The dynamic-field mechanism is unused by v2. Legacy v1 df entries remain on the old book (frozen layout) but no new ones are created.
 
 ## Evidence
 

@@ -3,7 +3,7 @@
 - **Severity:** P0 (funds at risk, active on mainnet today)
 - **Area:** contracts
 - **Phase:** 0
-- **Status:** ⚠️ Interim mitigation shipped (2026-10-02): `ActivityFeed` removed from the landing page, bearer-link warning added to `SendTab`. **The event leak itself is still live on-chain** — the permanent commitment-scheme fix ships with the v5 upgrade (Phase 3).
+- **Status:** 🔶 Fixed in code (2026-10-02, pending deployment): v2 payments use a blake2b256(secret) commitment — the raw secret is never stored or emitted. `PaymentCreatedEventV2` carries only the key. Frontend event feed removed earlier as interim mitigation. Legacy v1 payments remain bearer-exposed until claimed/refunded; senders of large legacy payments should refund + resend via v2.
 
 ## Evidence
 

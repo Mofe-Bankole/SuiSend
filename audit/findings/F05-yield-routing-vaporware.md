@@ -3,7 +3,7 @@
 - **Severity:** P0 (advertised capability does not exist; capability surface is fiction)
 - **Area:** contracts
 - **Phase:** 3
-- **Status:** Open
+- **Status:** 🔶 Fixed in code (2026-10-02, pending deployment): REAL pause switch added — `PaymentBookV2.paused` + `set_book_v2_paused` gated by AdminCap (refunds intentionally ungated). `YieldRouterCap` cannot be deleted under the `compatible` upgrade policy (public interface is frozen) — it remains on-chain but gates nothing; docstrings no longer advertise routing or pause features that don't exist.
 
 ## Evidence
 

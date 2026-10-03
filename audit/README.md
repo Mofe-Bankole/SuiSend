@@ -22,15 +22,16 @@ Each finding is a file in [`findings/`](./findings). The remediation order is in
 
 | ID | Title | Severity | Area | Phase | Status |
 |----|-------|----------|------|-------|--------|
-| [F01](./findings/F01-events-leak-claim-secret.md) | `PaymentCreatedEvent` broadcasts the claim secret; anyone can steal any payment | P0 | contracts | 0 | ⚠️ Mitigated (interim) |
+| [F01](./findings/F01-events-leak-claim-secret.md) | `PaymentCreatedEvent` broadcasts the claim secret; anyone can steal any payment | P0 | contracts | 0 | 🔶 Fixed in code (v5) |
 | [F02](./findings/F02-claim-route-missing.md) | `/claim/[hash]` page does not exist — every generated link 404s | P0 | frontend | 1 | ✅ Fixed |
 | [F03](./findings/F03-zklogin-broken-on-mainnet.md) | zkLogin uses dev prover, has no gas path, sessions rot silently | P0 | infra/frontend | 2 | 🔶 Partial (prover fixed) |
 | [F04](./findings/F04-refund-path-missing.md) | Promised auto-refund is vaporware: no agent, no refund UI | P0 | contracts/ops/frontend | 2 | Open |
-| [F05](./findings/F05-yield-routing-vaporware.md) | `YieldRouterCap` authorizes nothing; "pause" documented but absent | P0 | contracts | 3 | Open |
-| [F06](./findings/F06-payment-state-fiction.md) | `PaymentRecord.state` never transitions; refunded shows as "Claimed" | P1 | contracts | 3 | Open |
-| [F07](./findings/F07-coin-type-df-leak.md) | Coin-type dynamic field never removed — storage leak + latent abort | P1 | contracts | 3 | Open |
-| [F08](./findings/F08-mock-vault-on-mainnet.md) | Zero-yield mock vault entry functions live on mainnet | P1 | contracts | 3 | Open |
-| [F09](./findings/F09-permissionless-vault-init.md) | Anyone can spawn competing `ScallopYieldVaultGeneric<T>` vaults | P1 | contracts | 3 | Open |
+| [F19](./findings/F19-bearer-link-authorization.md) | Claim links are bearer instruments — no recipient authorization | P0 | contracts | 3 | 🔶 Fixed in code (v5) |
+| [F05](./findings/F05-yield-routing-vaporware.md) | `YieldRouterCap` authorizes nothing; "pause" documented but absent | P0 | contracts | 3 | 🔶 Fixed in code (v5) |
+| [F06](./findings/F06-payment-state-fiction.md) | `PaymentRecord.state` never transitions; refunded shows as "Claimed" | P1 | contracts | 3 | 🔶 Fixed in code (v5) |
+| [F07](./findings/F07-coin-type-df-leak.md) | Coin-type dynamic field never removed — storage leak + latent abort | P1 | contracts | 3 | 🔶 Fixed in code (v5) |
+| [F08](./findings/F08-mock-vault-on-mainnet.md) | Zero-yield mock vault entry functions live on mainnet | P1 | contracts | 3 | 🔶 Fixed in code (v5) |
+| [F09](./findings/F09-permissionless-vault-init.md) | Anyone can spawn competing `ScallopYieldVaultGeneric<T>` vaults | P1 | contracts | 3 | 🔶 Fixed in code (v5) |
 | [F10](./findings/F10-package-id-sprawl.md) | 4 package versions; frontend event queries break on every upgrade | P1 | contracts/frontend | 3 | Open |
 | [F11](./findings/F11-stats-decimal-confusion.md) | Public stats sum SUI (9-dec) + USDC (6-dec) as one number | P2 | frontend | 4 | Open |
 | [F12](./findings/F12-history-fake-zeros.md) | Sent history hardcodes `yieldEarned: "0"`, `note: ""`; capped at 50 | P2 | frontend | 4 | Open |

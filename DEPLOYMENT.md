@@ -103,3 +103,41 @@ export const UPGRADE_CAP_ID            = "0xc72edb6cfed2183e066bb02f169c6e1fbdc3
 export const SCALLOP_ADDRESS_ID        = "67c44a103fe1b8c454eb9699";
 export const NETWORK                   = "mainnet";
 ```
+
+---
+
+## v5 Upgrade — Security & Authorization (prepared 2026-10-02, NOT YET DEPLOYED)
+
+**Code status:** built, zero warnings, 8/8 authorization unit tests green.
+**Audit basis:** F01, F05–F09, F19. See `audit/findings/`.
+
+### What changes on-chain
+- New shared object **`PaymentBookV2`** (created post-upgrade by deployer)
+- New `PaymentRecordV2`: blake2b256(secret) keys, `recipient_lock`, `pin_hash`,
+  `coin_type` in-record, no `state` field
+- New functions: `create_payment_v2`, `create_payment_v2_generic`,
+  `claim_payment_v2`, `claim_payment_v2_generic`, `refund_sender_v2`,
+  `refund_sender_v2_generic`, `refund_expired_v2`, `refund_expired_v2_generic`,
+  `init_book_v2`, `set_book_v2_paused`, `admin_init_vault_generic`,
+  `payment_v2_*` getters
+- Neutralized (hard-abort, ABI-compat): `create_payment`, `claim_payment`,
+  `refund_sender`, `refund_expired` (mock path), `init_vault_generic`
+- Legacy v1 scallop paths remain live for existing payments until they drain
+
+### Deploy checklist
+1. `sui move build` (zero warnings) + `sui move test` (8/8 green)
+2. `sui client upgrade --upgrade-capability 0xc72edb6cfed2183e066bb02f169c6e1fbdc336a2cd745819c0123cea1bed1933`
+   Record the new package ID and the digest below.
+3. Call `core::init_book_v2` with the AdminCap
+   (`0x80d507ca0f2ad8baa02ac10445a5898fa2a44b88818d3e1b3d9134f59eb80f2b`).
+   Record the created `PaymentBookV2` object ID.
+4. Frontend: add v5 package ID to `SUISEND_ALL_PACKAGE_IDS`, add
+   `PAYMENT_BOOK_V2_ID`, switch send/claim to the v2 builders.
+5. Senders of large legacy (v1) payments: refund + resend via v2 (legacy
+   links remain bearer-exposed until they drain).
+
+| Field | Value |
+|-------|-------|
+| v5 package ID | _TBD on deploy_ |
+| v5 upgrade digest | _TBD on deploy_ |
+| PaymentBookV2 ID | _TBD on deploy_ |

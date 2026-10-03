@@ -44,14 +44,8 @@ module suisend::yield {
 
     // ─── Error codes ─────────────────────────────────────────────────────────
 
-    /// Caller tried to withdraw from a position that does not exist.
-    const EPositionNotFound: u64 = 1;
-
     /// Caller provided an invalid protocol identifier.
     const EInvalidProtocol: u64 = 2;
-
-    /// Arithmetic overflow during interest calculation.
-    const EMathOverflow: u64 = 3;
 
     // ─── Protocol identifiers ────────────────────────────────────────────────
 
