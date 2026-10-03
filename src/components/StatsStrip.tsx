@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSuiClient } from "@mysten/dapp-kit";
 import { useLiveStats } from "@/lib/usePaymentEvents";
+import { getScallopApy } from "@/lib/scallop";
 
 function animCount(el: HTMLElement, target: number, decimals: number, duration: number) {
   const start = performance.now();
@@ -17,58 +18,121 @@ function animCount(el: HTMLElement, target: number, decimals: number, duration: 
 
 export default function StatsStrip() {
   const suiClient = useSuiClient();
-  const { totalPayments, totalVolume, loading } = useLiveStats(suiClient);
+  const { totalPayments, totalVolume, loading, failed } = useLiveStats(suiClient);
+  const [apy, setApy] = useState<number | null>(null);
   const triggered = useRef(false);
 
   useEffect(() => {
-    triggered.current = false;
-  }, [totalPayments, totalVolume]);
+    let cancelled = false;
+    getScallopApy(suiClient)
+      .then((v) => {
+        if (!cancelled) setApy(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [suiClient]);
 
   useEffect(() => {
+    if (loading || failed || apy === null) return;
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("in");
-            if (!triggered.current) {
-              triggered.current = true;
-              const cells: { id: string; target: number; decimals: number }[] = [
-                { id: "s1", target: totalVolume, decimals: totalVolume >= 100 ? 1 : 2 },
-                { id: "s2", target: 8.2, decimals: 1 },
-                { id: "s3", target: totalPayments, decimals: 0 },
-                { id: "s4", target: 0.5, decimals: 1 },
-              ];
-              const timings = [1800, 1400, 1600, 1000];
-              cells.forEach((c, i) => {
-                const el = document.getElementById(c.id);
-                if (el && c.target > 0) {
-                  animCount(el, c.target, c.decimals, timings[i]);
-                }
-              });
-            }
+          if (entry.isIntersecting && !triggered.current) {
+            triggered.current = true;
+            const cells: { id: string; target: number; decimals: number; dur: number }[] = [
+              { id: "s1", target: totalVolume, decimals: totalVolume >= 100 ? 1 : 2, dur: 1600 },
+              { id: "s2", target: apy, decimals: 1, dur: 1200 },
+              { id: "s3", target: totalPayments, decimals: 0, dur: 1400 },
+            ];
+            cells.forEach((c) => {
+              const el = document.getElementById(c.id);
+              if (el && c.target > 0) animCount(el, c.target, c.decimals, c.dur);
+            });
           }
         });
       },
-      { threshold: 0.12 },
+      { threshold: 0.2 },
     );
 
     document.querySelectorAll(".stat-cell").forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [loading, totalVolume, totalPayments]);
+  }, [loading, failed, apy, totalVolume, totalPayments]);
+
+  // When live chain data is unreachable, degrade to always-true facts
+  // instead of showing lying zeros (brand honesty rule).
+  const usageAvailable = !failed;
+
+  const cells = [
+    usageAvailable
+      ? {
+          id: "s1",
+          label: "SUI sent through links",
+          content: loading ? (
+            <span className="skel inline-block w-24 h-8 align-middle" />
+          ) : (
+            <>
+              <span id="s1">0</span> <em className="not-italic">SUI</em>
+            </>
+          ),
+        }
+      : {
+          id: "f1",
+          label: "Platform fees",
+          content: (
+            <>
+              $0<em className="not-italic"> fees</em>
+            </>
+          ),
+        },
+    {
+      id: "s2",
+      label: "Live Scallop supply APY",
+      content:
+        apy === null ? (
+          <span className="skel inline-block w-16 h-8 align-middle" />
+        ) : (
+          <>
+            <span id="s2">0</span>
+            <em className="not-italic">%</em>
+          </>
+        ),
+    },
+    usageAvailable
+      ? {
+          id: "s3",
+          label: "Payment links created",
+          content: loading ? (
+            <span className="skel inline-block w-12 h-8 align-middle" />
+          ) : (
+            <span id="s3">0</span>
+          ),
+        }
+      : {
+          id: "f3",
+          label: "Self-custodial, always",
+          content: (
+            <>
+              100<em className="not-italic">%</em>
+            </>
+          ),
+        },
+    {
+      id: "s4",
+      label: "Transaction finality on Sui",
+      content: (
+        <>
+          &lt;1<em className="not-italic">s</em>
+        </>
+      ),
+    },
+  ];
 
   return (
     <div className="border-t border-b border-border">
       <div className="mx-auto max-w-[1200px] grid grid-cols-4 max-md:grid-cols-2 bg-border gap-[1px] stats-inner">
-        {[
-          { id: "s1", label: "Total value on mainnet",
-            content: loading ? <span className="skel inline-block w-24 h-8 align-middle" /> : <><span id="s1">0</span> <em className="not-italic">SUI</em></> },
-          { id: "s2", label: "Average APY via Scallop",
-            content: loading ? <span className="skel inline-block w-16 h-8 align-middle" /> : <><span id="s2">0</span><em className="not-italic">%</em></> },
-          { id: "s3", label: "Payment links created",
-            content: loading ? <span className="skel inline-block w-12 h-8 align-middle" /> : <span id="s3">0</span> },
-          { id: "s4", label: "Transaction finality on Sui",
-            content: loading ? <span className="skel inline-block w-16 h-8 align-middle" /> : <>&lt;<span id="s4">0</span><em className="not-italic">s</em></> },
-        ].map((cell, i) => {
+        {cells.map((cell, i) => {
           const delayClass = i === 0 ? "" : i === 1 ? "rd1" : i === 2 ? "rd2" : "rd3";
           return (
             <div key={cell.id} className={`stat-cell bg-background px-10 py-11 transition-colors hover:bg-bg-card reveal ${delayClass}`}>

@@ -1,17 +1,17 @@
 "use client";
 
 import Reveal from "./Reveal";
+import SectionHead from "./SectionHead";
 
 const rows = [
   { feature: "Money earns yield while pending", suisend: true, paypal: false, venmo: false, bank: false },
   { feature: "Sub-second finality", suisend: true, paypal: true, venmo: true, bank: false },
   { feature: "Self-custodial", suisend: true, paypal: false, venmo: false, bank: false },
   { feature: "No account needed to receive", suisend: true, paypal: false, venmo: false, bank: false },
-  { feature: "Auto-refund with interest", suisend: true, paypal: false, venmo: false, bank: false },
+  { feature: "Refundable with interest", suisend: true, paypal: false, venmo: false, bank: false },
   { feature: "Global, no borders", suisend: true, paypal: true, venmo: false, bank: false },
   { feature: "Programmable (smart contracts)", suisend: true, paypal: false, venmo: false, bank: false },
   { feature: "Zero platform fees", suisend: true, paypal: false, venmo: false, bank: false },
-  { feature: "Audited smart contracts", suisend: true, paypal: true, venmo: true, bank: true },
 ];
 
 const columns = [
@@ -41,14 +41,18 @@ function Cross() {
 export default function ComparisonSection() {
   return (
     <div className="section-wrap" style={{ paddingTop: 0 }}>
-      <div className="eyebrow">Why SuiSend</div>
-      <Reveal>
-        <h2 className="section-h2">
-          Payments shouldn&apos;t
-          <br />
-          sit still.
-        </h2>
-      </Reveal>
+      <SectionHead
+        index={4}
+        of={5}
+        label="Why SuiSend"
+        title={
+          <>
+            Payments shouldn&apos;t
+            <br />
+            sit still.
+          </>
+        }
+      />
 
       <Reveal delay="rd1">
         <div className="overflow-x-auto">

@@ -1,54 +1,81 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useSuiClient } from "@mysten/dapp-kit";
-import { useLiveStats } from "@/lib/usePaymentEvents";
+import { getScallopApy } from "@/lib/scallop";
+import { motion } from "framer-motion";
+
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } },
+};
+const rise = {
+  hidden: { opacity: 0, y: 26 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] as const },
+  },
+};
+
+function estimateWeeklyYield(principal: number, apyPct: number): number {
+  return (principal * (apyPct / 100) * 7) / 365;
+}
 
 export default function Hero() {
   const suiClient = useSuiClient();
-  const { totalPayments, totalVolume, loading } = useLiveStats(suiClient);
-
-  const yvRef = useRef(0.08471);
-  const ocYieldRef = useRef<HTMLDivElement>(null);
+  const [apy, setApy] = useState<number | null>(null);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      yvRef.current += 0.0000028;
-      if (ocYieldRef.current) {
-        ocYieldRef.current.textContent = yvRef.current.toFixed(5);
-      }
-    }, 900);
-    return () => clearInterval(id);
-  }, []);
+    let cancelled = false;
+    getScallopApy(suiClient)
+      .then((v) => {
+        if (!cancelled) setApy(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [suiClient]);
+
+  const exampleApy = apy ?? 8.2;
+  const weeklyYield = estimateWeeklyYield(100, exampleApy);
 
   return (
     <section
-      className="min-h-screen flex items-center justify-center px-20 pb-20 pt-[100px] relative overflow-hidden max-md:px-6 max-md:pt-[90px] max-md:pb-[60px]"
+      className="relative overflow-hidden px-6 md:px-12 pt-36 md:pt-44 pb-24"
       id="top"
     >
-      <div className="dot-grid" />
+      <div className="hero-glow" aria-hidden />
 
-      <div className="relative z-2 max-w-2xl mx-auto text-center">
-        <div className="hero-tag justify-center">
+      <motion.div
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="relative z-10 mx-auto max-w-[1200px] text-center"
+      >
+        <motion.div variants={rise} className="hero-tag mx-auto">
           <div className="hero-tag-dot" />
-          Built on Sui · Scallop DeFi
-        </div>
+          Live on Sui mainnet · Yield by Scallop
+        </motion.div>
 
-        <h1 className="font-display text-[clamp(44px,5.5vw,76px)] font-bold tracking-[-0.04em] leading-[1.0] mb-[22px]">
+        <motion.h1 variants={rise} className="hero-title">
           Send money.
           <br />
-          It <em className="not-italic text-accent">earns</em>
-          <br />
-          while they wait.
-        </h1>
+          It <em className="not-italic gradient-text">earns</em> while
+          they wait.
+        </motion.h1>
 
-        <p className="text-base text-text-secondary font-light leading-[1.75] max-w-[400px] mx-auto mb-10">
-          Every payment link you create automatically deposits into DeFi yield.
-          Recipients claim your original amount — plus interest. Idle money is
-          dead money.
-        </p>
+        <motion.p variants={rise} className="hero-sub mx-auto mt-7">
+          Every payment link deposits into a real DeFi lending pool. The
+          recipient claims your original amount — plus the interest it
+          earned along the way.
+        </motion.p>
 
-        <div className="flex gap-2.5 items-center justify-center mb-16">
+        <motion.div
+          variants={rise}
+          className="flex gap-3 items-center justify-center mt-10"
+        >
           <a href="/app" className="btn-p">
             Create a link
             <svg
@@ -67,117 +94,70 @@ export default function Hero() {
           <a href="#how" className="btn-s">
             How it works
           </a>
-        </div>
+        </motion.div>
 
-        <div className="flex items-center justify-center gap-8 pt-8 border-t border-border max-w-lg mx-auto">
-          <div>
-            <div className="live-val">
-              {loading ? (
-                <span className="skel inline-block w-16 h-6 align-middle" />
-              ) : (
-                <span>{volumeStr(totalVolume, totalPayments)}</span>
-              )}{" "}
-              <em className="not-italic">SUI</em>
-            </div>
-            <div className="live-label">Total value sent</div>
-          </div>
-          <div className="live-divider" />
-          <div>
-            <div className="live-val">
-              {loading ? (
-                <span className="skel inline-block w-12 h-6 align-middle" />
-              ) : (
-                totalPayments
-              )}
-            </div>
-            <div className="live-label">Payments created</div>
-          </div>
-          <div className="live-divider" />
-          <div>
-            <div className="live-val">
-              8.2<em className="not-italic">%</em>
-            </div>
-            <div className="live-label">Current APY</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-md:hidden pointer-events-none" aria-hidden>
-        <div
-          className="orb-card"
-          style={{
-            position: "absolute",
-            top: "18%",
-            left: "6%",
-            width: "160px",
-            animationDelay: "0s",
-          }}
+        {/* Crafted product visual — honest, labeled example */}
+        <motion.div
+          initial={{ opacity: 0, y: 48, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.8, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          className="relative mx-auto mt-20 max-w-[560px]"
         >
-          <div className="oc-label">Yield earned</div>
-          <div className="oc-val green" ref={ocYieldRef}>
-            0.08471
-          </div>
-          <div className="oc-sub">SUI accrued</div>
-          <div className="oc-badge">▲ 8.2% APY</div>
-        </div>
-
-        <div
-          className="orb-card"
-          style={{
-            position: "absolute",
-            bottom: "18%",
-            right: "6%",
-            width: "150px",
-            animationDelay: "1.5s",
-          }}
-        >
-          <div className="oc-status">
-            <div className="oc-dot" />
-            <span>Earning now</span>
-          </div>
-          <div className="mt-2.5">
-            <div className="oc-val text-[15px]">
-              {loading ? "—" : totalPayments} links
+          <div className="mock text-left">
+            <div className="mock-bar">
+              <div className="mock-dot" />
+              <div className="mock-dot" />
+              <div className="mock-dot" />
+              <div className="mock-url">suisend.xyz/app</div>
             </div>
-            <div className="oc-sub">
-              {loading ? "—" : `${volumeShort(totalVolume)} active`}
+            <div className="mock-body">
+              <div className="mock-label">Amount</div>
+              <div className="mock-input">100 SUI</div>
+              <div className="mock-label">Note</div>
+              <div className="mock-input font-normal! text-text-secondary!">
+                For the Lagos trip…
+              </div>
+              <div className="mock-yield">
+                <span className="mock-yield-l">
+                  Est. yield · 7 days ·{" "}
+                  {apy === null ? "…" : exampleApy.toFixed(1) + "% live APY"}
+                </span>
+                <span className="mock-yield-r">
+                  +{weeklyYield.toFixed(3)} SUI
+                </span>
+              </div>
+              <div className="mock-btn">Generate payment link →</div>
+              <div className="mock-link">
+                <div className="mock-link-dot" />
+                suisend.xyz/claim/0x4f2a…8c91
+              </div>
             </div>
           </div>
-        </div>
 
-        <div
-          className="orb-card"
-          style={{
-            position: "absolute",
-            top: "38%",
-            right: "10%",
-            width: "130px",
-            animationDelay: "2.5s",
-          }}
-        >
-          <div className="oc-label">Claimed</div>
-          <div className="oc-val text-[15px]">
-            100.084{" "}
-            <span className="text-[11px] text-text-secondary font-normal">
-              SUI
-            </span>
+          <div
+            className="mock-float hidden lg:block"
+            style={{ right: "-88px", bottom: "52px" }}
+          >
+            <div className="mf-label">Recipient claims</div>
+            <div className="mf-val">
+              {(100 + weeklyYield).toFixed(3)} SUI
+            </div>
+            <div className="mf-sub">principal + yield</div>
           </div>
-          <div className="oc-sub text-accent">+0.084 earned</div>
-        </div>
-      </div>
+
+          <div className="text-text-muted text-[11px] mt-5">
+            Example, not a real transaction ·{" "}
+            <a
+              href="https://suiscan.xyz/mainnet/object/0x4889941e6073c7e3bebc602c1a09ebc014c64a2b9137569a20100ece0219bafd"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent hover:underline"
+            >
+              verified on mainnet ↗
+            </a>
+          </div>
+        </motion.div>
+      </motion.div>
     </section>
   );
-}
-
-function volumeStr(vol: number, count: number): string {
-  if (count === 0) return "0";
-  if (vol >= 1000) return (vol / 1000).toFixed(1).replace(/\.0$/, "") + "K";
-  return vol.toFixed(vol < 1 ? 4 : vol < 10 ? 2 : 1);
-}
-
-function volumeShort(vol: number): string {
-  if (vol === 0) return "$0";
-  if (vol >= 1000)
-    return "$" + (vol / 1000).toFixed(1).replace(/\.0$/, "") + "K";
-  return "$" + vol.toFixed(1);
 }

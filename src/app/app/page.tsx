@@ -114,7 +114,7 @@ export default function AppPage() {
             </div>
           )}
           <button
-            className="px-4 py-1.5 rounded-lg text-[13px] font-medium font-display bg-bg-card border border-border-light text-text-primary hover:border-text-muted transition-all cursor-pointer"
+            className="px-4 py-1.5 rounded-lg text-[13px] font-medium font-display bg-bg-card border border-border-light text-text-primary hover:border-text-muted transition-colors cursor-pointer"
             onClick={() => setShowConnectModal(true)}
           >
             {connectedLabel || "Connect"}

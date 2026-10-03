@@ -190,7 +190,7 @@ export default function HistoryTab() {
                         <span className="font-display font-semibold text-[16px] tracking-tight">
                           {item.data.amount}
                         </span>
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[rgba(158,255,91,0.12)] text-accent">
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--accent-soft)] text-accent">
                           {item.type === "received" ? "Received" : "Sent"}
                         </span>
                         <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.06)] text-text-muted">

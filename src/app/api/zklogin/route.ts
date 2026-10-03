@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createHmac } from "crypto";
 
-const PROVER_URL = "https://prover-dev.mystenlabs.com/v1";
+// Mainnet prover. prover-dev.mystenlabs.com is for devnet/testnet only.
+const PROVER_URL = "https://prover.mystenlabs.com/v1";
 
 const googleJWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/oauth2/v3/certs"),

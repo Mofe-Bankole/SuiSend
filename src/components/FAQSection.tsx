@@ -2,39 +2,40 @@
 
 import { useState } from "react";
 import Reveal from "./Reveal";
+import SectionHead from "./SectionHead";
 
 const faqs = [
   {
     q: "How does SuiSend work?",
-    a: "You connect your wallet and create a payment link with an amount. The funds are deposited into DeFi lending pools (Scallop) where they earn yield until claimed. You share the link, and the recipient claims the original amount plus all interest accrued.",
+    a: "You connect your wallet and create a payment link with an amount. The funds are deposited into Scallop's lending pool on Sui where they earn yield until claimed. You share the link, and the recipient claims the original amount plus all interest accrued.",
   },
   {
     q: "Is my money safe?",
-    a: "Yes — funds never sit with us. They're deposited directly into audited DeFi protocols on Sui (starting with Scallop) via smart contracts you can verify on-chain. Every transaction is self-custodial.",
+    a: "Funds never sit with us — they're deposited directly into Scallop via smart contracts you can verify on-chain. Two things to know: the claim link is a bearer link (anyone who has it can claim, so share it carefully), and DeFi yields carry smart-contract risk. We never custody anything.",
   },
   {
     q: "What happens if the recipient never claims?",
-    a: "Payment links auto-refund after 14 days. You get back your original amount plus all yield earned during that period — nothing is lost.",
+    a: "You can take an unclaimed payment back at any time — you get your original amount plus all yield earned. Automatic refunds on link expiry are rolling out as well.",
   },
   {
     q: "Does the recipient need a crypto wallet?",
-    a: "Not in the current version. Recipients can claim using just the link. zkLogin support (claim with Google, Twitter, or email) is coming soon — no wallet required on either side.",
+    a: "They can claim with any Sui wallet, or by signing in with Google (zkLogin) — no seed phrase needed. Google claims currently require a small SUI balance for gas; fully sponsored, zero-balance claims are coming.",
   },
   {
     q: "What yield can I expect?",
-    a: "Current APY on Scallop's Sui lending pool is approximately 8.2%. The yield is calculated in real time and prorated by the second — every moment your money is unclaimed, it earns.",
+    a: "Whatever Scallop's SUI lending pool is paying — recently around 8% APY, variable. The app shows you the live pool rate before you send. Yield accrues in real time until the moment the link is claimed.",
   },
   {
     q: "Is this on mainnet or testnet?",
-    a: "The smart contracts are deployed on Sui testnet for the hackathon. Mainnet deployment is planned post-hackathon. The Scallop integration will work with real SUI on mainnet.",
+    a: "Fully on Sui mainnet, with real SUI and USDC, integrated with Scallop's production lending pools. Contract addresses are linked in our docs.",
   },
   {
-    q: "How does the AI yield routing work?",
-    a: "Our agent monitors multiple DeFi protocols (Scallop, Navi) and automatically routes deposits to the highest available APY. Multi-protocol routing is in development — for now, funds are deposited into Scallop.",
+    q: "How will yield routing work?",
+    a: "Today every deposit goes to Scallop. On the roadmap: routing across Sui lending protocols (Navi and others) to always land in the highest pool — automatically.",
   },
   {
     q: "What fees does SuiSend charge?",
-    a: "Zero platform fees. You only pay Sui network gas fees (typically less than $0.01 per transaction). The yield your money earns while unclaimed is entirely yours (or the recipient's).",
+    a: "Zero platform fees. You only pay Sui network gas (typically less than $0.01 per transaction). Every point of yield goes to you or your recipient.",
   },
 ];
 
@@ -47,13 +48,18 @@ export default function FAQSection() {
 
   return (
     <div className="section-wrap">
-      <div className="eyebrow">Common questions</div>
-      <Reveal>
-        <h2 className="section-h2">
-          Everything you<br />
-          need to know
-        </h2>
-      </Reveal>
+      <SectionHead
+        index={5}
+        of={5}
+        label="Questions"
+        title={
+          <>
+            Everything you
+            <br />
+            need to know
+          </>
+        }
+      />
 
       <Reveal delay="rd1">
         <div className="faq-list">

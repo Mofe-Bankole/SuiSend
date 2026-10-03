@@ -324,7 +324,7 @@ export default function SendTab({
                 setCopied(false);
               }
             }}
-            className={`flex-1 py-2 rounded-[10px] text-sm font-display font-semibold transition-all ${
+            className={`flex-1 py-2 rounded-[10px] text-sm font-display font-semibold transition-colors ${
               selectedCoin === coin
                 ? "bg-accent text-background shadow-sm"
                 : "text-text-secondary hover:text-text-primary"
@@ -357,7 +357,7 @@ export default function SendTab({
           <button
             key={val}
             onClick={() => handlePreset(val)}
-            className={`flex-1 py-2 rounded-lg text-[12px] font-medium font-display cursor-pointer transition-all ${
+            className={`flex-1 py-2 rounded-lg text-[12px] font-medium font-display cursor-pointer transition-colors ${
               parseFloat(amount) === val
                 ? "bg-accent text-background"
                 : "bg-bg-card border border-border-light text-text-secondary hover:border-text-muted"
@@ -522,8 +522,9 @@ export default function SendTab({
               </div>
             )}
             <div className="lgp-note">
-              Share this link with anyone. They only need the link to claim — no
-              wallet required on their end. Funds earn yield until claimed.
+              <strong>Anyone with this link can claim the funds.</strong> Share
+              it only with the intended recipient — treat it like cash. Funds
+              earn yield until claimed.
             </div>
           </motion.div>
         )}

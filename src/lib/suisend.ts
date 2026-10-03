@@ -592,6 +592,68 @@ export async function queryUserClaimReceipts(
   return claims;
 }
 
+export type TerminalStatus = "claimed" | "refunded" | "unknown";
+
+function normalizeEventLinkHash(raw: unknown): string {
+  if (Array.isArray(raw)) {
+    return "0x" + toHex(new Uint8Array(raw as number[]));
+  }
+  return (raw as string) || "";
+}
+
+/**
+ * Best-effort check of a payment's terminal state after its record is gone
+ * from the PaymentBook. A record is removed on both claim and refund, so
+ * on-chain getters cannot distinguish them — the events can.
+ *
+ * Window is the most recent 50 events of each type per package version;
+ * returns "unknown" when the payment isn't found there.
+ */
+export async function queryPaymentTerminalStatus(
+  suiClient: SuiJsonRpcClient,
+  linkHashHex: string,
+): Promise<TerminalStatus> {
+  const target = linkHashHex.startsWith("0x")
+    ? linkHashHex
+    : "0x" + linkHashHex;
+
+  for (const pkgId of SUISEND_ALL_PACKAGE_IDS) {
+    try {
+      const claimed = await suiClient.queryEvents({
+        query: { MoveEventType: `${pkgId}::core::PaymentClaimedEvent` },
+        limit: 50,
+        order: "descending",
+      });
+      for (const ev of claimed.data) {
+        const p = ev.parsedJson as Record<string, unknown> | null;
+        if (p && normalizeEventLinkHash(p.link_hash) === target) {
+          return "claimed";
+        }
+      }
+    } catch {
+      /* skip packages that never emitted this event */
+    }
+
+    try {
+      const refunded = await suiClient.queryEvents({
+        query: { MoveEventType: `${pkgId}::core::PaymentRefundedEvent` },
+        limit: 50,
+        order: "descending",
+      });
+      for (const ev of refunded.data) {
+        const p = ev.parsedJson as Record<string, unknown> | null;
+        if (p && normalizeEventLinkHash(p.link_hash) === target) {
+          return "refunded";
+        }
+      }
+    } catch {
+      /* skip packages that never emitted this event */
+    }
+  }
+
+  return "unknown";
+}
+
 export interface PaymentStats {
   totalPayments: number;
   totalVolumeMist: number;

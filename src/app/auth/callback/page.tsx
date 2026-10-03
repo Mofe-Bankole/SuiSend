@@ -24,8 +24,13 @@ export default function AuthCallback() {
     completeZkLogin(idToken)
       .then(() => {
         setStatus("done");
-        // Redirect back to the app
-        setTimeout(() => router.push("/app"), 500);
+        // Return the user to where they started the sign-in (e.g. a
+        // /claim/<hash> page) rather than always dumping them on /app.
+        const returnTo = sessionStorage.getItem("zklogin.returnTo");
+        sessionStorage.removeItem("zklogin.returnTo");
+        const dest =
+          returnTo && returnTo.startsWith("/") ? returnTo : "/app";
+        setTimeout(() => router.push(dest), 500);
       })
       .catch((err) => {
         setErrorMsg(err instanceof Error ? err.message : "ZK proof failed");

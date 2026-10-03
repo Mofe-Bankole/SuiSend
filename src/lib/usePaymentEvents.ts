@@ -77,17 +77,19 @@ export function useLiveStats(suiClient: SuiJsonRpcClient | null) {
   const [totalVolume, setTotalVolume] = useState(0);
   const [uniqueSenders, setUniqueSenders] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!suiClient) return;
 
     const fetchStats = async () => {
-      try {
-        let allPayments = 0;
-        let totalMist = 0;
-        const senders = new Set<string>();
+      let allPayments = 0;
+      let totalMist = 0;
+      let packagesSucceeded = 0;
+      const senders = new Set<string>();
 
-        for (const pkgId of SUISEND_ALL_PACKAGE_IDS) {
+      for (const pkgId of SUISEND_ALL_PACKAGE_IDS) {
+        try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let cursor: any = null;
           let hasMore = true;
@@ -108,16 +110,23 @@ export function useLiveStats(suiClient: SuiJsonRpcClient | null) {
             cursor = result.nextCursor ?? null;
             hasMore = result.hasNextPage;
           }
+          packagesSucceeded++;
+        } catch {
+          /* one package failing must not zero the rest */
         }
+      }
 
+      if (packagesSucceeded === 0) {
+        // Total failure (offline / rate-limited): keep last good values,
+        // flag it so the UI can degrade instead of showing lying zeros.
+        setFailed(true);
+      } else {
+        setFailed(false);
         setTotalPayments(allPayments);
         setTotalVolume(totalMist / SUI_PER_MIST);
         setUniqueSenders(senders.size);
-      } catch (err) {
-        console.error("useLiveStats error:", err);
-      } finally {
-        setLoading(false);
       }
+      setLoading(false);
     };
 
     fetchStats();
@@ -125,5 +134,5 @@ export function useLiveStats(suiClient: SuiJsonRpcClient | null) {
     return () => clearInterval(id);
   }, [suiClient]);
 
-  return { totalPayments, totalVolume, uniqueSenders, loading };
+  return { totalPayments, totalVolume, uniqueSenders, loading, failed };
 }

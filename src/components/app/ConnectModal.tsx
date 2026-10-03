@@ -39,6 +39,12 @@ export default function ConnectModal({
     }
     setConnectingGoogle(true);
     try {
+      // Remember where the user started so the OAuth callback can return
+      // them there (e.g. a /claim/<hash> link) instead of always /app.
+      sessionStorage.setItem(
+        "zklogin.returnTo",
+        window.location.pathname + window.location.search,
+      );
       const url = await getGoogleAuthUrl();
       window.location.href = url;
     } catch {
@@ -73,7 +79,7 @@ export default function ConnectModal({
 
         <div className="space-y-3">
           <button
-            className="w-full flex items-center gap-3 p-4 rounded-xl bg-bg-card border border-border-light hover:border-accent/50 transition-all text-left cursor-pointer"
+            className="w-full flex items-center gap-3 p-4 rounded-xl bg-bg-card border border-border-light hover:border-accent/50 transition-colors text-left cursor-pointer"
             onClick={handleWallet}
           >
             <div className="w-10 h-10 rounded-xl bg-bg-card border border-border-light flex items-center justify-center flex-shrink-0">
@@ -105,7 +111,7 @@ export default function ConnectModal({
           </button>
 
           <button
-            className="w-full flex items-center gap-3 p-4 rounded-xl bg-bg-card border border-border-light hover:border-accent/50 transition-all text-left cursor-pointer disabled:opacity-50"
+            className="w-full flex items-center gap-3 p-4 rounded-xl bg-bg-card border border-border-light hover:border-accent/50 transition-colors text-left cursor-pointer disabled:opacity-50"
             onClick={handleGoogle}
             disabled={connectingGoogle}
           >

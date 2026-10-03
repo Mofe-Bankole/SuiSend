@@ -1,24 +1,17 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Inter, Geist_Mono } from "next/font/google";
+import { Sora, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/app/Providers";
-import CustomCursor from "@/components/CustomCursor";
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-display",
+const sora = Sora({
+  variable: "--font-sora",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
 });
 
-const inter = Inter({
-  variable: "--font-body",
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
   subsets: ["latin"],
-  weight: ["300", "400", "500"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
@@ -35,10 +28,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${inter.variable} ${geistMono.variable}`}
+      className={`${sora.variable} ${plexMono.variable}`}
     >
       <body className="min-h-full flex flex-col">
-        <CustomCursor />
         <Providers>{children}</Providers>
       </body>
     </html>

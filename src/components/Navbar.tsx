@@ -1,6 +1,6 @@
 export default function Navbar() {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-100 flex items-center justify-between px-12 h-16 bg-[rgba(8,8,10,0.80)] backdrop-blur-xl border-b border-border">
+    <nav className="fixed top-0 left-0 right-0 z-100 flex items-center justify-between px-12 h-16 bg-[rgba(18,19,15,0.80)] backdrop-blur-xl border-b border-border">
       <a
         href="#"
         className="flex items-center gap-2 font-display text-[17px] font-semibold tracking-tight text-text-primary no-underline"

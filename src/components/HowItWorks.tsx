@@ -1,118 +1,87 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
+import { useSuiClient } from "@mysten/dapp-kit";
+import { getScallopApy } from "@/lib/scallop";
 import Reveal from "./Reveal";
+import SectionHead from "./SectionHead";
+
+const steps = [
+  {
+    title: "Create a payment link",
+    desc: "Connect your Sui wallet, enter an amount. One transaction deposits your funds directly into Scallop's lending pool and generates a shareable claim link.",
+    aside: null,
+  },
+  {
+    title: "It earns the whole wait",
+    desc: "While unclaimed, your funds stay in the pool earning the live rate. Yield accrues in real time — the longer they wait, the more they receive.",
+    aside: "apy",
+  },
+  {
+    title: "They claim everything",
+    desc: "One click and the recipient gets your original amount plus all interest accrued. Changed your mind? You can take an unclaimed link back — yield included.",
+    aside: null,
+  },
+];
 
 export default function HowItWorks() {
-  const featTickerRef = useRef<HTMLDivElement>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
-  const yvRef = useRef(0.08471);
+  const suiClient = useSuiClient();
+  const [apy, setApy] = useState<number | null>(null);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      yvRef.current += 0.0000028;
-      if (featTickerRef.current) {
-        featTickerRef.current.textContent = yvRef.current.toFixed(7);
-      }
-    }, 900);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("in");
-          }
-        });
-      },
-      { threshold: 0.12 },
-    );
-    grid.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, []);
+    let cancelled = false;
+    getScallopApy(suiClient)
+      .then((v) => {
+        if (!cancelled) setApy(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [suiClient]);
 
   return (
     <div
       className="section-wrap mx-auto max-w-[1200px] px-12 py-[120px] max-md:px-6"
       id="how"
     >
-      <div className="eyebrow">How it works</div>
-      <Reveal>
-        <h2 className="section-h2">
-          Three steps.
-          <br />
-          No idle money.
-        </h2>
-      </Reveal>
+      <SectionHead
+        index={1}
+        of={5}
+        label="How it works"
+        title={
+          <>
+            Three steps.
+            <br />
+            No idle money.
+          </>
+        }
+      />
 
-      <div className="feature-grid" ref={gridRef}>
-        <div className="feat feat-dark feat-tall reveal">
-          <div className="feat-num">01</div>
-          <div className="feat-icon">→</div>
-          <div className="feat-h3">Create a payment link</div>
-          <p className="feat-p">
-            Connect your Sui wallet, enter an amount. One transaction deposits
-            your funds directly into Scallop&apos;s lending pool and generates a
-            shareable claim link.
-          </p>
-          <div className="feat-yield-vis">
-            <div className="fyv-label">Live yield preview</div>
-            <div className="fyv-val" ref={featTickerRef}>
-              0.0000000
+      <div className="steps">
+        {steps.map((step, i) => (
+          <Reveal key={step.title} delay={i === 1 ? "rd1" : i === 2 ? "rd2" : undefined}>
+            <div className="step">
+              <div className="step-index">
+                {String(i + 1).padStart(2, "0")}
+              </div>
+              <div>
+                <div className="step-title">{step.title}</div>
+                <p className="step-desc">{step.desc}</p>
+                {step.aside === "apy" && (
+                  <div className="mock-yield mt-6 max-w-[340px]">
+                    <span className="mock-yield-l">
+                      Live Scallop SUI supply APY
+                    </span>
+                    <span className="mock-yield-r">
+                      {apy === null ? "…" : `${apy.toFixed(2)}%`}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="fyv-sub">SUI earned this session</div>
-            <div className="fyv-bar">
-              <div className="fyv-bar-fill" />
-            </div>
-          </div>
-        </div>
-
-        <div className="feat feat-light reveal rd1">
-          <div className="feat-num" style={{ color: "rgba(8,8,10,0.35)" }}>
-            02
-          </div>
-          <div
-            className="feat-icon"
-            style={{ borderColor: "rgba(8,8,10,0.12)", color: "#08080A" }}
-          >
-            ◎
-          </div>
-          <div className="feat-h3">Money earns</div>
-          <p className="feat-p">
-            While unclaimed, every second your funds compound. The longer they
-            wait — the more they receive.
-          </p>
-        </div>
-
-        <div className="feat feat-mid reveal rd2">
-          <div className="feat-num">02b <span className="coming-badge ml-2">Coming soon</span></div>
-          <div className="feat-icon">⚡</div>
-          <div className="feat-h3">AI picks best yield</div>
-          <p className="feat-p">
-            Our agent scans Sui DeFi protocols in real time and routes to the
-            highest APY automatically.
-          </p>
-        </div>
-
-        <div className="feat feat-accent feat-wide reveal rd1">
-          <div className="feat-num">03</div>
-          <div
-            className="feat-icon"
-            style={{ borderColor: "rgba(158,255,91,0.2)" }}
-          >
-            ↓
-          </div>
-          <div className="feat-h3">Recipient claims everything</div>
-          <p className="feat-p">
-            One click. They receive your original amount plus all interest
-            accrued during the wait. If unclaimed after 30 days, you get it all
-            back — with yield.
-          </p>
-        </div>
+          </Reveal>
+        ))}
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ export default function CTA() {
   return (
     <section className="border-t border-border px-12 py-[120px] flex flex-col items-center text-center relative overflow-hidden max-md:px-6">
       <div className="cta-bg-glow" />
-      <div className="eyebrow relative">Sui Overflow 2026 · Testnet live</div>
+      <div className="eyebrow relative">Live on Sui mainnet</div>
       <Reveal>
         <p
           style={{
